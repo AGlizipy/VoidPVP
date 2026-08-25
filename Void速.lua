@@ -729,7 +729,7 @@ local function PerformAttackMode1()
     local Part2 = M1_ProcessRealPlayers(OthersEnemies)
     if #OthersEnemies > 0 then M1_Attack(Part1 or Part2, OthersEnemies) end
 end
-local Settings = { Range = 5000, AttackSpeed = 0, AutoScanRemotes = true }
+local Settings = { Range = 250, AttackSpeed = 0, AutoScanRemotes = true }
 local Net = ReplicatedStorage:WaitForChild("Modules"):WaitForChild("Net")
 local RegisterAttack = Net:WaitForChild("RE/RegisterAttack")
 local RegisterHit = Net:WaitForChild("RE/RegisterHit")
@@ -840,7 +840,7 @@ RJR[L("杀戮光环")]:Toggle({
 
 RJR[L("杀戮光环")]:Dropdown({
     Title = L("快速攻击模式"),
-    Values = {"模式1", "模式2(部分账号失效用)"},
+    Values = {"模式1", "模式2(模式1没用用这个)"},
     Value = _G.G_FastAttackMode,
     Callback = function(v)
         _G.G_FastAttackMode = v
