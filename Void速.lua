@@ -824,7 +824,7 @@ task.spawn(function()
              task.wait(0)
         else
              local elapsed = tick() - startTime
-             local waitTime = math.max(0.001 - elapsed, 0)
+             local waitTime = math.max(0 - elapsed, 0)
              task.wait(waitTime)
         end
     end
@@ -2640,7 +2640,7 @@ local function StartBringMobs()
                                 end
                                 
                                 -- 如果怪物距离超过15studs，拉到脚下15studs位置
-                                if distance > 15 then
+                                if distance > 18 then
                                     -- 检查是否为网络所有者
                                     local isOwner = false
                                     if isnetworkowner then
@@ -2651,7 +2651,7 @@ local function StartBringMobs()
                                     
                                     if isOwner then
                                         -- 拉到玩家脚下15studs的位置
-                                        enemyRoot.CFrame = CFrame.new(targetPos.X, targetPos.Y - 15, targetPos.Z)
+                                        enemyRoot.CFrame = CFrame.new(targetPos.X, targetPos.Y - 18, targetPos.Z)
                                     end
                                 end
                                 
