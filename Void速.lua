@@ -318,7 +318,7 @@ local Translations = {
     ["中文"] = {},
     ["English"] = {
         -- 窗口
-        ["VoidBF"] = "Void",
+        ["Void中心"] = "Void",
         ["主要功能"] = "Main",
         ["杀戮光环"] = "Aura",
         ["ESP"] = "ESP",
@@ -575,7 +575,7 @@ local Window = WindUI:CreateWindow({
     HideSearchBar = false,
     SideBarWidth = 200,
     OpenButton = {
-        Title = "Void-VIP",
+        Title = "VoidBF-PVP",
         CornerRadius = UDim.new(1, 0),
         StrokeThickness = 3,
         Enabled = true,
@@ -617,6 +617,10 @@ end)
 Window:OnDestroy(function()
     if connection then connection:Disconnect() end
 end)
+local Tabs = {
+    [L("主要功能")] = Window:Section({ Title = L("主要功能"), Opened = true }),
+    [L("设置")] = Window:Section({ Title = L("设置"), Opened = true }),
+}
 local RJR = {
     [L("主要功能")] = Tabs[L("主要功能")]:Tab({ Title = L("主要功能"), Icon = "zap" }),
     [L("杀戮光环")] = Tabs[L("主要功能")]:Tab({ Title = L("杀戮光环"), Icon = "sword" }),
@@ -722,7 +726,7 @@ local function PerformAttackMode1()
     local Part2 = M1_ProcessRealPlayers(OthersEnemies)
     if #OthersEnemies > 0 then M1_Attack(Part1 or Part2, OthersEnemies) end
 end
-local Settings = { Range = 250, AttackSpeed = 0, AutoScanRemotes = true }
+local Settings = { Range = 5000, AttackSpeed = 0.05, AutoScanRemotes = true }
 local Net = ReplicatedStorage:WaitForChild("Modules"):WaitForChild("Net")
 local RegisterAttack = Net:WaitForChild("RE/RegisterAttack")
 local RegisterHit = Net:WaitForChild("RE/RegisterHit")
@@ -1238,6 +1242,7 @@ handleAbility("V4")
 
 local fleeConnection = nil
 local fleeTeleported = false
+-- 逃跑移动速度(studs/秒):Y 上升 530,Z 前进 300
 local FLEE_Y = 530
 local FLEE_Z = 300
 -- 世界2 → 鬼船，世界3 → 九头蛇
@@ -3089,6 +3094,7 @@ RJR[L("商店")]:Button({
         game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("CommF_"):InvokeServer(unpack(args))
     end
 })
+
 RJR[L("服务器")]:Button({
     Title = L("重进服务器"),
     Callback = function()
