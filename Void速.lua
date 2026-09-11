@@ -6,6 +6,7 @@ local Workspace = game:GetService("Workspace")
 local UIS = game:GetService("UserInputService")
 local LocalPlayer = Players.LocalPlayer
 local CONFIG_FILE = "RJR_NEW_C.json"
+
 _G.G_FastAttack       = _G.G_FastAttack ~= true
 _G.G_FastAttackMode   = _G.G_FastAttackMode or "模式2(部分账号失效用)"
 _G.G_AttackMobs       = _G.G_AttackMobs ~= true
@@ -66,10 +67,8 @@ _G.G_TeleportOffsetY  = _G.G_TeleportOffsetY or 0
 _G.G_TeleportOffsetZ  = _G.G_TeleportOffsetZ or 0
 _G.G_SelectPly        = _G.G_SelectPly or ""
 _G.G_TeleportPly      = _G.G_TeleportPly or false
-_G.G_Teleport         = _G.G_Teleport or false
 _G.G_Lock2            = _G.G_Lock2 or false
-_G.G_LockOrbit        = _G.G_LockOrbit or false
-_G.G_TeleportPredict  = _G.G_TeleportPredict or false
+_G.G_TweenNearest     = _G.G_TweenNearest or false
 _G.G_LockQuickPath    = _G.G_LockQuickPath ~= false
 _G.G_SpectatePlys     = _G.G_SpectatePlys or false
 
@@ -97,7 +96,6 @@ _G.G_SilentAimTeamCheck     = _G.G_SilentAimTeamCheck or false
 _G.G_SilentAimExcludePVP    = _G.G_SilentAimExcludePVP or false
 _G.G_SilentAimMethod        = _G.G_SilentAimMethod or "鼠标最近的玩家"
 _G.G_LockHotkey              = _G.G_LockHotkey or false
-_G.G_LockHotkeyMode          = _G.G_LockHotkeyMode or "锁人1"
 _G.G_LockHotkeyKey           = _G.G_LockHotkeyKey or "H"
 _G.G_AutoSoru                = _G.G_AutoSoru or false
 
@@ -156,12 +154,14 @@ local ConfigKeys = {
     "G_spinSpeed",
     "G_AutoFpsLock",
     "G_NoMove",
+    "G_BringMobs",
+    "G_AutoSoru",
     "G_TeleportOffsetX",
     "G_TeleportOffsetY",
     "G_TeleportOffsetZ",
-    "G_TeleportPredict",
+    "G_Lock2",
+    "G_TweenNearest",
     "G_LockQuickPath",
-    "G_LockOrbit",
     "G_ServerRegion",
     "G_HopPlayerRange",
     "G_HopBountyRange",
@@ -185,7 +185,6 @@ local ConfigKeys = {
     "G_SilentAimExcludePVP",
     "G_SilentAimMethod",
     "G_LockHotkey",
-    "G_LockHotkeyMode",
     "G_LockHotkeyKey",
     "G_Theme",
     "G_Language",
@@ -319,7 +318,7 @@ local Translations = {
     ["中文"] = {},
     ["English"] = {
         -- 窗口
-        ["Void中心"] = "Void",
+        ["VoidBF"] = "Void",
         ["主要功能"] = "Main",
         ["杀戮光环"] = "Aura",
         ["ESP"] = "ESP",
@@ -409,9 +408,17 @@ local Translations = {
         ["刷新玩家列表"] = "Refresh Player List",
         ["观战玩家"] = "Spectate Player",
         ["平滑传送至玩家"] = "Twen TP",
-        ["直接传送至玩家"] = "Instant TP",
         ["锁人2"] = "Lock 2",
-        ["锁人预判 (对抗飞行)"] = "Lock Predict (Anti-Fly)",
+        ["传送至最近玩家"] = "TP to Nearest Player",
+        ["锁人2开启"] = "Lock 2 Started",
+        ["锁人2关闭"] = "Lock 2 Stopped",
+        ["最近玩家传送开启"] = "Nearest TP Started",
+        ["最近玩家传送关闭"] = "Nearest TP Stopped",
+        ["已停止锁定目标"] = "Stopped locking target",
+        ["平滑追踪目标，近距离自动锁定"] = "Smooth chase, auto lock when close",
+        ["自动借快捷传送点接近最近玩家"] = "Auto use quick TP points to approach",
+        ["未授权"] = "Unauthorized",
+        ["该功能仅限授权用户"] = "Authorized users only",
         ["X轴偏移"] = "X Offset",
         ["Y轴偏移"] = "Y Offset",
         ["Z轴偏移"] = "Z Offset",
@@ -452,7 +459,6 @@ local Translations = {
         ["按下按键开始锁定"] = "Press the key to lock",
         ["解除锁定"] = "Unlock",
         ["开始锁定"] = "Start Lock",
-        ["锁人模式"] = "Lock Mode",
         ["M1 R 自瞄"] = "M1 R Aimbot",
         ["选择瞄准玩家"] = "Select Aimbot Player",
         ["重置数据"] = "Reset Stads",
@@ -486,14 +492,6 @@ local Translations = {
         ["传送开启"] = "Teleport Started",
         ["传送关闭"] = "Teleport Stopped",
         ["已停止传送目标玩家"] = "Stopped teleporting to target",
-        ["Bypass关闭"] = "Bypass Off",
-        ["已恢复目标玩家状态"] = "Target player state restored",
-        ["传送中断"] = "Teleport Interrupted",
-        ["目标/本地玩家角色异常"] = "Target/local character error",
-        ["锁人2开启"] = "Lock 2 Started",
-        ["自动选最近传送点接近，300米内直接锁定"] = "Auto nearest TP approach, direct lock within 300m",
-        ["锁人2关闭"] = "Lock 2 Stopped",
-        ["已停止锁定目标"] = "Stopped locking target",
         ["快捷传送点"] = "Quick TP Point",
         ["锁人快捷路径"] = "Lock Quick Path",
         ["环绕锁人"] = "Orbit Lock",
@@ -507,7 +505,6 @@ local Translations = {
         ["正在锁人: "] = "Locking: ",
         ["正在锁人..."] = "Locking...",
         -- 补充（下拉框显示值/通知）
-        ["锁人1"] = "Lock 1",
         ["跟随鼠标"] = "Follow Mouse",
         ["屏幕中心"] = "Screen Center",
         ["模式1"] = "Mode 1",
@@ -578,7 +575,7 @@ local Window = WindUI:CreateWindow({
     HideSearchBar = false,
     SideBarWidth = 200,
     OpenButton = {
-        Title = "VoidBF-PVP",
+        Title = "Void-VIP",
         CornerRadius = UDim.new(1, 0),
         StrokeThickness = 3,
         Enabled = true,
@@ -620,10 +617,6 @@ end)
 Window:OnDestroy(function()
     if connection then connection:Disconnect() end
 end)
-local Tabs = {
-    [L("主要功能")] = Window:Section({ Title = L("主要功能"), Opened = true }),
-    [L("设置")] = Window:Section({ Title = L("设置"), Opened = true }),
-}
 local RJR = {
     [L("主要功能")] = Tabs[L("主要功能")]:Tab({ Title = L("主要功能"), Icon = "zap" }),
     [L("杀戮光环")] = Tabs[L("主要功能")]:Tab({ Title = L("杀戮光环"), Icon = "sword" }),
@@ -840,7 +833,7 @@ RJR[L("杀戮光环")]:Toggle({
 
 RJR[L("杀戮光环")]:Dropdown({
     Title = L("快速攻击模式"),
-    Values = {"模式1", "模式2(模式1没用用这个)"},
+    Values = {"模式1", "模式2(部分账号失效用)"},
     Value = _G.G_FastAttackMode,
     Callback = function(v)
         _G.G_FastAttackMode = v
@@ -864,158 +857,253 @@ RJR[L("杀戮光环")]:Toggle({
     end
 })
 task.spawn(function()
-    local Modules = ReplicatedStorage:WaitForChild("Modules")
-    local DragonNet = Modules:WaitForChild("Net")
-    local ShootGunEvent = DragonNet:WaitForChild("RE/ShootGunEvent")
-    local Validator2 = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("Validator2")
-    local getupval = debug.getupvalue or getupvalue
-    local setupval = debug.setupvalue or setupvalue
-    local getupvals = debug.getupvalues or getupvalues
-    local ShootFunction
-    local V_Idx = { v26 = 12, v22 = 13, v25 = 14, v21 = 15, v23 = 16, v24 = 17, v27 = 18 }
-    local function InitDragonGun()
-        local success, result = pcall(require, ReplicatedStorage:WaitForChild("Controllers"):WaitForChild("CombatController"))
-        if success and type(result) == "table" and result.Attack then ShootFunction = getupval(result.Attack, 9) end
+    local Players = game:GetService("Players")
+    local RepStorage = game:GetService("ReplicatedStorage")
+    local WS = workspace
+    local player = Players.LocalPlayer
+
+    local Net = RepStorage:WaitForChild("Modules"):WaitForChild("Net")
+    local ShootGunEvent = Net:WaitForChild("RE/ShootGunEvent")
+    local Validator2 = RepStorage:WaitForChild("Remotes"):WaitForChild("Validator2")
+
+    local shootFunc, idx, dragonReady = nil, {}, false
+    local LIMB_PARTS = {
+        "Head", "UpperTorso", "LowerTorso",
+        "LeftUpperArm", "RightUpperArm", "LeftLowerArm", "RightLowerArm",
+        "LeftUpperLeg", "RightUpperLeg", "LeftLowerLeg", "RightLowerLeg",
+        "HumanoidRootPart"
+    }
+
+    local VALID_SEA_ENEMIES = {
+        "Terrorshark", "Shark", "Piranha",
+        "Fish Crew Member", "Haunted Crew Member",
+        "FishBoat", "PirateBrigade", "PirateGrandBrigade"
+    }
+
+    local function getRandomLimb(character)
+        if not character then return nil end
+        local available = {}
+        for _, name in ipairs(LIMB_PARTS) do
+            local part = character:FindFirstChild(name)
+            if part and part:IsA("BasePart") then
+                available[#available + 1] = part
+            end
+        end
+        if #available == 0 then return character:FindFirstChild("HumanoidRootPart") end
+        return available[math.random(1, #available)]
     end
-    local function GetNextValidator()
-        if not ShootFunction then InitDragonGun() end
-        if not ShootFunction then return 0, 0 end
-        local upvals = getupvals(ShootFunction)
-        if not upvals then return 0, 0 end
-        if upvals[V_Idx.v21] ~= 727595 then
-            for i, v in pairs(upvals) do
-                if v == 727595 then
-                    local offset = i - 15
-                    V_Idx.v21 = i; V_Idx.v22 = 13 + offset; V_Idx.v23 = 16 + offset; V_Idx.v24 = 17 + offset
-                    V_Idx.v26 = 12 + offset; V_Idx.v25 = 14 + offset; V_Idx.v27 = 18 + offset
-                    break
+
+    local function initDragon()
+        if dragonReady then return end
+        local success = pcall(function()
+            local cc = require(RepStorage:WaitForChild("Controllers"):WaitForChild("CombatController"))
+            for _, v in ipairs(debug.getupvalues(cc.Attack)) do
+                if type(v) == "function" then
+                    for i, uv in ipairs(debug.getupvalues(v)) do
+                        if uv == 727595 then
+                            shootFunc = v
+                            idx = { u25 = i-3, u21 = i-2, u24 = i-1, u20 = i, u22 = i+1, u23 = i+2, u26 = i+3 }
+                            break
+                        end
+                    end
+                    if shootFunc then break end
+                end
+            end
+        end)
+        if success and shootFunc then dragonReady = true end
+    end
+
+    local function fireShot(pos, hit)
+        if not shootFunc then return end
+        local u20 = debug.getupvalue(shootFunc, idx.u20)
+        local u21 = debug.getupvalue(shootFunc, idx.u21)
+        local u22 = debug.getupvalue(shootFunc, idx.u22)
+        local u23 = debug.getupvalue(shootFunc, idx.u23)
+        local u24 = debug.getupvalue(shootFunc, idx.u24)
+        local u25 = debug.getupvalue(shootFunc, idx.u25)
+        local u26 = debug.getupvalue(shootFunc, idx.u26)
+        local u79 = u25 * u21
+        local u80 = (u24 * u21 + u25 * u20) % u22
+        u80 = (u80 * u22 + u79) % u23
+        u24 = math.floor(u80 / u22)
+        u25 = u80 - u24 * u22
+        u26 = u26 + 1
+        debug.setupvalue(shootFunc, idx.u24, u24)
+        debug.setupvalue(shootFunc, idx.u25, u25)
+        debug.setupvalue(shootFunc, idx.u26, u26)
+        Validator2:FireServer(math.floor(u80 / u23 * 16777215), u26)
+        ShootGunEvent:FireServer(pos, { hit })
+    end
+
+    local function getAllPlayerBoatModels()
+        local models = {}
+        local boats = WS:FindFirstChild("Boats")
+        if boats then
+            for _, v in ipairs(boats:GetChildren()) do
+                local owner = v:FindFirstChild("Owner")
+                if owner and owner.Value and tostring(owner.Value) ~= "" then
+                    models[v.Name] = true
                 end
             end
         end
-        local v1 = getupval(ShootFunction, V_Idx.v21)
-        local v2 = getupval(ShootFunction, V_Idx.v22)
-        local v3 = getupval(ShootFunction, V_Idx.v23)
-        local v4 = getupval(ShootFunction, V_Idx.v24)
-        local v5 = getupval(ShootFunction, V_Idx.v25)
-        local v6 = getupval(ShootFunction, V_Idx.v26)
-        local v7 = getupval(ShootFunction, V_Idx.v27)
-        if not (v1 and v2 and v3 and v4 and v5 and v6 and v7) then return 0, 0 end
-        local v8 = v6 * v2
-        local v9 = (v5 * v2 + v6 * v1) % v3
-        v9 = (v9 * v3 + v8) % v4
-        v5 = math.floor(v9 / v3)
-        v6 = v9 - v5 * v3
-        v7 = v7 + 1
-        setupval(ShootFunction, V_Idx.v25, v5); setupval(ShootFunction, V_Idx.v26, v6); setupval(ShootFunction, V_Idx.v27, v7)
-        return math.floor(v9 / v4 * 16777215), v7
+        return models
     end
-    local function IsSilentAimEnemy(player)
-        if not player or player == LocalPlayer then return false end
-        local main = LocalPlayer:FindFirstChild("PlayerGui") and LocalPlayer.PlayerGui:FindFirstChild("Main")
+
+    local function IsSilentAimEnemy(target)
+        if not target or target == player then return false end
+        local main = player:FindFirstChild("PlayerGui") and player.PlayerGui:FindFirstChild("Main")
         local frame = main and main:FindFirstChild("Allies")
             and main.Allies:FindFirstChild("Container")
             and main.Allies.Container:FindFirstChild("Allies")
             and main.Allies.Container.Allies:FindFirstChild("ScrollingFrame")
             and main.Allies.Container.Allies.ScrollingFrame:FindFirstChild("Frame")
-        if frame and frame:FindFirstChild(player.Name) then return false end
-        local myTeam = LocalPlayer.Team
-        local targetTeam = player.Team
+        if frame and frame:FindFirstChild(target.Name) then return false end
+        local myTeam = player.Team
+        local targetTeam = target.Team
         if myTeam and targetTeam and myTeam.Name == "Marines" and targetTeam.Name == "Marines" then return false end
         return true
     end
-    local function GetClosestDragonTarget()
-        local char = LocalPlayer.Character
-        local root = char and char:FindFirstChild("HumanoidRootPart")
-        if not root then return nil end
-        local closest, dist = nil, math.huge
-        local myPos = root.Position
+
+    local function IsRubberTarget(target)
+        local isRubber = false
+        pcall(function()
+            local fruit = target.Data.DevilFruit.Value
+            if typeof(fruit) == "string" and fruit:find("Rubber") then
+                isRubber = true
+            end
+        end)
+        return isRubber
+    end
+
+    local AttackRange = 450
+
+    local function getClosestSeaTarget()
+        local char = player.Character
+        if not char then return nil end
+        local myHRP = char:FindFirstChild("HumanoidRootPart")
+        if not myHRP then return nil end
+
+        local best, bestDist = nil, AttackRange
+        local playerBoats = getAllPlayerBoatModels()
+
         if _G.G_AttackMobs then
-            local function scanSea(node, depth)
+            local seaBeasts = WS:FindFirstChild("SeaBeasts")
+            if seaBeasts then
+                for _, e in ipairs(seaBeasts:GetChildren()) do
+                    local hrp = e:FindFirstChild("HumanoidRootPart")
+                    local hp = e:FindFirstChild("Health")
+                    if hrp and hp and hp:IsA("ValueBase") and hp.Value > 0 then
+                        local segment = e:FindFirstChild("Leviathan Segment")
+                        if segment then
+                            local dist = (segment.Position - myHRP.Position).Magnitude
+                            if dist < bestDist then
+                                bestDist = dist
+                                best = segment
+                            end
+                        end
+                        local dist = (hrp.Position - myHRP.Position).Magnitude
+                        if dist < bestDist then
+                            bestDist = dist
+                            best = getRandomLimb(e) or hrp
+                        end
+                    end
+                end
+            end
+
+            local enemies = WS:FindFirstChild("Enemies")
+            if enemies then
+                for _, e in ipairs(enemies:GetChildren()) do
+                    if not table.find(VALID_SEA_ENEMIES, e.Name) then continue end
+                    if playerBoats[e.Name] then continue end
+
+                    local engine = e:FindFirstChild("Engine")
+                    local isBoat = engine and e:FindFirstChild("VehicleSeat")
+                    if isBoat then
+                        local hp = e:FindFirstChild("Health")
+                        if hp and hp:IsA("ValueBase") and hp.Value > 0 then
+                            local dist = (engine.Position - myHRP.Position).Magnitude
+                            if dist < bestDist then
+                                bestDist = dist
+                                best = engine
+                            end
+                        end
+                    else
+                        local hrp = e:FindFirstChild("HumanoidRootPart")
+                        local hum = e:FindFirstChildOfClass("Humanoid")
+                        if hrp and hum and hum.Health > 0 then
+                            local dist = (hrp.Position - myHRP.Position).Magnitude
+                            if dist < bestDist then
+                                bestDist = dist
+                                best = getRandomLimb(e) or hrp
+                            end
+                        end
+                    end
+                end
+            end
+
+            local function scanNPC(node, depth)
                 if not node then return end
                 for _, enemy in node:GetChildren() do
                     local eHum = enemy:FindFirstChildOfClass("Humanoid")
-                    local eRoot = enemy:FindFirstChild("HumanoidRootPart") or enemy.PrimaryPart or enemy:FindFirstChildWhichIsA("BasePart")
-                    if eRoot and (not eHum or eHum.Health > 0) then
-                        local d = (eRoot.Position - myPos).Magnitude
-                        if d < dist then dist = d; closest = eRoot end
-                    elseif depth < 3 and not enemy:IsA("BasePart") then
-                        scanSea(enemy, depth + 1)
-                    end
-                end
-            end
-            local enemiesFolder = workspace:FindFirstChild("Enemies")
-            if enemiesFolder then
-                for _, enemy in enemiesFolder:GetChildren() do
-                    local eHum = enemy:FindFirstChildOfClass("Humanoid")
                     local eRoot = enemy:FindFirstChild("HumanoidRootPart")
-                    if eHum and eHum.Health > 0 and eRoot then
-                        local d = (eRoot.Position - myPos).Magnitude
-                        if d < dist then dist = d; closest = eRoot end
-                    end
-                end
-            end
-            scanSea(workspace:FindFirstChild("SeaBeasts"), 0)
-            scanSea(workspace:FindFirstChild("SeaEvents"), 0)
-        end
-        if _G.G_AttackPlayers then
-            for _, player in pairs(Players:GetPlayers()) do
-                if player ~= LocalPlayer and player.Character then
-                    if player:GetAttribute("PvpDisabled") == true then continue end
-                    local isRubber = false
-                    pcall(function()
-                        local fruit = player.Data.DevilFruit.Value
-                        if typeof(fruit) == "string" and fruit:find("Rubber") then
-                            isRubber = true
+                    if eRoot and eHum and eHum.Health > 0 then
+                        local dist = (eRoot.Position - myHRP.Position).Magnitude
+                        if dist < bestDist then
+                            bestDist = dist
+                            best = getRandomLimb(enemy) or eRoot
                         end
-                    end)
-                    if isRubber then continue end
-                    if not IsSilentAimEnemy(player) then continue end
-                    local pHum = player.Character:FindFirstChildOfClass("Humanoid")
-                    local pRoot = player.Character:FindFirstChild("HumanoidRootPart")
-                    if pHum and pHum.Health > 0 and pRoot then
-                        local d = (pRoot.Position - myPos).Magnitude
-                        if d < dist then dist = d; closest = pRoot end
+                    elseif depth < 3 and not enemy:IsA("BasePart") then
+                        scanNPC(enemy, depth + 1)
+                    end
+                end
+            end
+            scanNPC(WS:FindFirstChild("Enemies"), 0)
+            scanNPC(WS:FindFirstChild("SeaEvents"), 0)
+        end
+
+        if _G.G_AttackPlayers then
+            for _, p in ipairs(Players:GetPlayers()) do
+                if p == player then continue end
+                if p:GetAttribute("PvpDisabled") == true then continue end
+                if IsRubberTarget(p) then continue end
+                if not IsSilentAimEnemy(p) then continue end
+                local pChar = p.Character
+                local pHRP = pChar and pChar:FindFirstChild("HumanoidRootPart")
+                local pHum = pChar and pChar:FindFirstChildOfClass("Humanoid")
+                if pHRP and pHum and pHum.Health > 0 then
+                    local dist = (pHRP.Position - myHRP.Position).Magnitude
+                    if dist < bestDist then
+                        bestDist = dist
+                        best = pHRP
                     end
                 end
             end
         end
-        return closest
+
+        return best
     end
-    while true do
-        task.wait(_G.G_M1FireInterval)
-        if not _G.G_DragonGunM1 then continue end
-        pcall(function()
-            local char = LocalPlayer.Character
-            local tool = char and char:FindFirstChildOfClass("Tool")
-            if not tool or tool.ToolTip ~= "Gun" then return end
-            local targetPart = GetClosestDragonTarget()
-            if not targetPart then return end
-            local valCode, valCount = GetNextValidator()
-            if valCode ~= 0 then Validator2:FireServer(valCode, valCount) end
-            tool:SetAttribute("LocalOverheat", 0)
-            tool:SetAttribute("LocalTotalShots", (tool:GetAttribute("LocalTotalShots") or 0) + 1)
-            ShootGunEvent:FireServer(targetPart.Position, { targetPart })
-        end)
-    end
+
+    task.spawn(function()
+        while not dragonReady do initDragon() task.wait(1) end
+        print("[Sea Events] Dragonstorm ready")
+        while task.wait() do
+            if not _G.G_DragonGunM1 then continue end
+            local char = player.Character
+            if not char then continue end
+            local tool = char:FindFirstChildOfClass("Tool")
+            if not tool or tool.Name ~= "Dragonstorm" then continue end
+            local target = getClosestSeaTarget()
+            if target then
+                fireShot(target.Position, target)
+            end
+        end
+    end)
 end)
 RJR[L("杀戮光环")]:Toggle({
     Title = L("枪械 m1"),
     Value = _G.G_DragonGunM1,
     Callback = function(v) 
         _G.G_DragonGunM1 = v 
-        SaveConfiguration()
-    end
-})
-RJR[L("杀戮光环")]:Slider({
-    Title = L("枪械 m1 发射间隔"),
-    Step = 0.001,
-    Value = {
-        Min = 0,
-        Max = 0.2,
-        Default = _G.G_M1FireInterval
-    },
-    Callback = function(v)
-        _G.G_M1FireInterval = v
         SaveConfiguration()
     end
 })
@@ -1056,7 +1144,7 @@ local function SetFruitM1Enabled(enabled)
                 local myHRP = char and char:FindFirstChild("HumanoidRootPart")
                 if not myHRP then continue end
                 if _G.G_AttackPlayers then
-                    for _, player in pairs(game:GetService("Players"):GetPlayers()) do
+                    for _, player in pairs(Players:GetPlayers()) do
                         if player ~= LocalPlayer and player.Character then
                             local targetHRP = player.Character:FindFirstChild("HumanoidRootPart")
                             local hum       = player.Character:FindFirstChild("Humanoid")
@@ -1150,6 +1238,8 @@ handleAbility("V4")
 
 local fleeConnection = nil
 local fleeTeleported = false
+local FLEE_Y = 530
+local FLEE_Z = 300
 -- 世界2 → 鬼船，世界3 → 九头蛇
 local function GetFleeDestination()
     local pid = game.PlaceId
@@ -1180,14 +1270,14 @@ local function StartAutoFlee()
     if fleeConnection then return end
     fleeConnection = task.spawn(function()
         while _G.G_AutoFlee do
-            task.wait(0.01)
+            task.wait()
             pcall(function()
                 if not _G.G_AutoFlee then return end
                 local char = LocalPlayer.Character
                 local hum = char and char:FindFirstChildOfClass("Humanoid")
                 local hrp = char and char:FindFirstChild("HumanoidRootPart")
+                -- 传送/重生过程中角色会短暂消失，此时不清除状态，避免传送点被反复调用
                 if not hum or not hrp or hum.Health <= 0 then
-                    fleeTeleported = false
                     return
                 end
                 local hpPercent = (hum.Health / hum.MaxHealth) * 100
@@ -1197,15 +1287,22 @@ local function StartAutoFlee()
                         local dest = GetFleeDestination()
                         if dest then
                             pcall(function()
-                                game:GetService("ReplicatedStorage").Remotes.CommF_:InvokeServer("requestEntrance", dest)
+                                ReplicatedStorage.Remotes.CommF_:InvokeServer("requestEntrance", dest)
                             end)
                         end
                     end
-                    -- 清零速度 + Physics 状态，否则重力会把角色拉下来
+                    -- 移动核心:与移动控制器脚本完全一致的结构(含双 task.wait)
+                    local ySpeed = FLEE_Y
+                    local zSpeed = FLEE_Z
+                    local deltaTime = task.wait()
+                    local currentPos = hrp.Position
+                    local newPosition = currentPos + Vector3.new(0, ySpeed * deltaTime, zSpeed * deltaTime)
+                    -- 清除物理速度，防止干扰
                     hrp.AssemblyLinearVelocity = Vector3.zero
                     hrp.AssemblyAngularVelocity = Vector3.zero
                     hum:ChangeState(Enum.HumanoidStateType.Physics)
-                    hrp.CFrame = hrp.CFrame + Vector3.new(0, 20, 0)
+                    -- 移动角色(保留原朝向)
+                    hrp.CFrame = CFrame.new(newPosition) * (hrp.CFrame - hrp.Position)
                 elseif fleeTeleported then
                     fleeTeleported = false
                     RestoreFleeState()
@@ -1304,21 +1401,32 @@ end
 local mt = getrawmetatable(game)
 local oldNamecall = mt.__namecall
 setreadonly(mt, false)
+-- 方法名字面量存 upvalue,避免混淆器按次解密
+local _FIRESERVER = "FireServer"
+local _INVOKESERVER = "InvokeServer"
 mt.__namecall = newcclosure(function(self, ...)
+    -- 技能自瞄未开启:一次全局读直接返回,不分配参数表、不解密方法名
+    if not _G.G_SilentAimSkill then
+        return oldNamecall(self, ...)
+    end
     local method = getnamecallmethod()
+    if method ~= _FIRESERVER and method ~= _INVOKESERVER then
+        return oldNamecall(self, ...)
+    end
+    if not IsCurrentSkillEnabled() or not _G.G_SilentAimTargetPos then
+        return oldNamecall(self, ...)
+    end
+    local sName = tostring(self)
+    if sName ~= "RemoteEvent" and sName ~= "CommE" and sName ~= "RemoteFunction" then
+        return oldNamecall(self, ...)
+    end
     local args = {...}
-    if _G.G_SilentAimSkill and IsCurrentSkillEnabled() and _G.G_SilentAimTargetPos and (method == "FireServer" or method == "InvokeServer") then
-        local sName = tostring(self)
-        if sName == "RemoteEvent" or sName == "CommE" or sName == "RemoteFunction" then
-            for i, v in pairs(args) do
-                if typeof(v) == "Vector3" then
-                    args[i] = _G.G_SilentAimTargetPos
-                end
-            end
-            return oldNamecall(self, unpack(args))
+    for i, v in pairs(args) do
+        if typeof(v) == "Vector3" then
+            args[i] = _G.G_SilentAimTargetPos
         end
     end
-    return oldNamecall(self, ...)
+    return oldNamecall(self, unpack(args))
 end)
 setreadonly(mt, true)
 local translateConnection
@@ -1969,13 +2077,32 @@ RJR[L("主要功能")]:Toggle({
 })
 
 local NoclipConnection = nil
+local NoclipParts = nil              -- 缓存角色当前部件表,避免每帧 GetDescendants() 全量遍历
+local NoclipChar = nil
+local NoclipAddConn = nil            -- 角色新部件加入时更新缓存
+
 local function StartNoclip()
     if NoclipConnection then return end
     NoclipConnection = RunService.Stepped:Connect(function()
         local char = LocalPlayer.Character
         if not char then return end
-        for _, part in pairs(char:GetDescendants()) do
-            if part:IsA("BasePart") and part.CanCollide then
+        if not NoclipParts then
+            NoclipChar = char
+            NoclipParts = char:GetDescendants()
+            if NoclipAddConn then NoclipAddConn:Disconnect() end
+            NoclipAddConn = char.DescendantAdded:Connect(function(desc)
+                if desc:IsA("BasePart") then
+                    NoclipParts = NoclipParts or {}
+                    table.insert(NoclipParts, desc)
+                    desc.CanCollide = false
+                end
+            end)
+        end
+        for i = #NoclipParts, 1, -1 do
+            local part = NoclipParts[i]
+            if not part.Parent then
+                table.remove(NoclipParts, i)
+            elseif part:IsA("BasePart") and part.CanCollide then
                 part.CanCollide = false
             end
         end
@@ -1986,6 +2113,12 @@ local function StopNoclip()
         NoclipConnection:Disconnect()
         NoclipConnection = nil
     end
+    if NoclipAddConn then
+        NoclipAddConn:Disconnect()
+        NoclipAddConn = nil
+    end
+    NoclipChar = nil
+    NoclipParts = nil
     local char = LocalPlayer.Character
     if not char then return end
     for _, part in pairs(char:GetDescendants()) do
@@ -2586,100 +2719,104 @@ end
 if _G.G_NoMove then StartNoMove() end
 
 local bringMobsConnection = nil
-local LastBringMobs = 0
+-- 缓存敌人子部件,避免每帧对每只怪重复 FindFirstChild("Humanoid"/"HumanoidRootPart")
+local bringMobsCache = {}
+local _RunService = RunService
+local _Workspace = Workspace
+
+local function GetBringMobsParts(enemy)
+    local c = bringMobsCache[enemy]
+    if c and c.hum and c.hum.Parent and c.root and c.root.Parent then
+        return c.hum, c.root
+    end
+    local hum = enemy:FindFirstChild("Humanoid")
+    local root = enemy:FindFirstChild("HumanoidRootPart")
+    if not hum or not root then
+        bringMobsCache[enemy] = nil
+        return nil, nil
+    end
+    bringMobsCache[enemy] = { hum = hum, root = root }
+    return hum, root
+end
 
 local function StartBringMobs()
     if bringMobsConnection then return end
     
-    -- 使用 task.spawn 降低执行频率，减少卡顿
-    bringMobsConnection = task.spawn(function()
-        while _G.G_BringMobs do
-            task.wait(0.1) -- 每0.1秒执行一次，而不是每帧
+    bringMobsConnection = _RunService.Heartbeat:Connect(function()
+        if not _G.G_BringMobs then return end
+        
+        pcall(function()
+            local char = LocalPlayer.Character
+            if not char then return end
             
-            pcall(function()
-                local char = LocalPlayer.Character
-                if not char then return end
-                
-                local hrp = char:FindFirstChild("HumanoidRootPart")
-                if not hrp then return end
-                
-                local hum = char:FindFirstChild("Humanoid")
-                if not hum or hum.Health <= 0 then return end
-                
-                -- 设置网络所有权范围
-                if sethiddenproperty then
-                    sethiddenproperty(LocalPlayer, "SimulationRadius", math.huge)
-                end
-                
-                local targetPos = hrp.Position
-                local enemies = Workspace:FindFirstChild("Enemies")
-                if not enemies then return end
-                
-                local enemyList = enemies:GetChildren()
-                
-                -- 遍历所有敌人，优化距离计算
-                for i = 1, #enemyList do
-                    local enemy = enemyList[i]
-                    if enemy:IsA("Model") then
-                        local enemyHum = enemy:FindFirstChild("Humanoid")
-                        local enemyRoot = enemy:FindFirstChild("HumanoidRootPart")
+            local hrp = char:FindFirstChild("HumanoidRootPart")
+            if not hrp then return end
+            
+            local hum = char:FindFirstChild("Humanoid")
+            if not hum or hum.Health <= 0 then return end
+            
+            if sethiddenproperty then
+                sethiddenproperty(LocalPlayer, "SimulationRadius", math.huge)
+            end
+            
+            local targetPos = hrp.Position
+            local enemies = _Workspace:FindFirstChild("Enemies")
+            if not enemies then return end
+            
+            local enemyList = enemies:GetChildren()
+            
+            for i = 1, #enemyList do
+                local enemy = enemyList[i]
+                if enemy:IsA("Model") then
+                    local enemyHum, enemyRoot = GetBringMobsParts(enemy)
+                    if enemyHum and enemyRoot and enemyHum.Health > 0 then
+                        local distance = (enemyRoot.Position - targetPos).Magnitude
                         
-                        if enemyHum and enemyRoot and enemyHum.Health > 0 then
-                            local distance = (enemyRoot.Position - targetPos).Magnitude
-                            
-                            -- 只聚集附近的怪物
-                            if distance <= 3000 then
-                                -- 添加或更新 BodyVelocity
-                                local bv = enemyRoot:FindFirstChild("BodyVelocity")
-                                if not bv then
-                                    bv = Instance.new("BodyVelocity")
-                                    bv.Name = "BodyVelocity"
-                                    bv.MaxForce = Vector3.new(1e9, 1e9, 1e9)
-                                    bv.Velocity = Vector3.zero
-                                    bv.Parent = enemyRoot
-                                end
-                                
-                                -- 如果怪物距离超过15studs，拉到脚下15studs位置
-                                if distance > 18 then
-                                    -- 检查是否为网络所有者
-                                    local isOwner = false
-                                    if isnetworkowner then
-                                        isOwner = isnetworkowner(enemyRoot)
-                                    else
-                                        isOwner = enemyRoot.ReceiveAge == 0 and not enemyRoot.Anchored
-                                    end
-                                    
-                                    if isOwner then
-                                        -- 拉到玩家脚下15studs的位置
-                                        enemyRoot.CFrame = CFrame.new(targetPos.X, targetPos.Y - 18, targetPos.Z)
-                                    end
-                                end
-                                
-                                -- 禁用碰撞和移动
-                                enemyRoot.CanCollide = false
-                                enemyHum.WalkSpeed = 0
-                                enemyHum.JumpPower = 0
+                        if distance <= 3000 then
+                            local bv = enemyRoot:FindFirstChild("BodyVelocity")
+                            if not bv then
+                                bv = Instance.new("BodyVelocity")
+                                bv.Name = "BodyVelocity"
+                                bv.MaxForce = Vector3.new(1e9, 1e9, 1e9)
+                                bv.Velocity = Vector3.zero
+                                bv.Parent = enemyRoot
                             end
+                            
+                            if distance > 18 then
+                                local isOwner = false
+                                if isnetworkowner then
+                                    isOwner = isnetworkowner(enemyRoot)
+                                else
+                                    isOwner = enemyRoot.ReceiveAge == 0 and not enemyRoot.Anchored
+                                end
+                                
+                                if isOwner then
+                                    enemyRoot.CFrame = CFrame.new(targetPos.X, targetPos.Y - 18, targetPos.Z)
+                                end
+                            end
+                            
+                            enemyRoot.CanCollide = false
+                            enemyHum.WalkSpeed = 0
+                            enemyHum.JumpPower = 0
                         end
                     end
                 end
-            end)
-        end
+            end
+        end)
     end)
 end
 
 local function StopBringMobs()
-    -- 停止标志
     _G.G_BringMobs = false
     
     if bringMobsConnection then
-        task.cancel(bringMobsConnection)
+        bringMobsConnection:Disconnect()
         bringMobsConnection = nil
     end
+    bringMobsCache = {}
     
-    -- 清理所有怪物的 BodyVelocity
     pcall(function()
-        local enemies = Workspace:FindFirstChild("Enemies")
+        local enemies = _Workspace:FindFirstChild("Enemies")
         if enemies then
             for _, enemy in ipairs(enemies:GetChildren()) do
                 if enemy:IsA("Model") then
@@ -2697,7 +2834,6 @@ local function StopBringMobs()
 end
 
 if _G.G_BringMobs then StartBringMobs() end
-
 
 
 RJR[L("杂项")]:Slider({
@@ -2827,7 +2963,7 @@ RJR[L("杂项")]:Toggle({
     Value = false,
     Callback = function(v)
         if v and setfpscap then
-            setfpscap(2000)
+            setfpscap(999)
         end
     end
 })
@@ -2953,7 +3089,6 @@ RJR[L("商店")]:Button({
         game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("CommF_"):InvokeServer(unpack(args))
     end
 })
-
 RJR[L("服务器")]:Button({
     Title = L("重进服务器"),
     Callback = function()
@@ -3358,7 +3493,7 @@ end
 
 local ActiveTween = nil
 
-local function topos(Pos)
+local function topos(Pos, Speed)
     if not LocalPlayer or not LocalPlayer.Character then return end
     local HRP = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
     local Humanoid = LocalPlayer.Character:FindFirstChild("Humanoid")
@@ -3369,8 +3504,8 @@ local function topos(Pos)
     Humanoid:ChangeState(Enum.HumanoidStateType.Physics)
 
     local Distance = (Pos.Position - HRP.Position).Magnitude
-    
-    local Speed = 300
+
+    Speed = Speed or 300
 
     if ActiveTween then ActiveTween:Cancel() end
 
@@ -3397,7 +3532,7 @@ local function topos(Pos)
             Humanoid:ChangeState(Enum.HumanoidStateType.Running)
         end
     end)
-    
+
     task.delay(0.05, function()
         if Humanoid then
             Humanoid:ChangeState(Enum.HumanoidStateType.Running)
@@ -3542,99 +3677,6 @@ RJR[L("传送")]:Toggle({
 })
 
 
-local PredictLastPos = {}
-local PredictLastTick = {}
-local function GetPredictedCFrame(hrp)
-    local now = tick()
-    local playerKey = hrp
-    local baseCFrame = hrp.CFrame
-
-    if not _G.G_TeleportPredict then
-        PredictLastPos[playerKey] = hrp.Position
-        PredictLastTick[playerKey] = now
-        return baseCFrame
-    end
-
-
-    local velocity = hrp.AssemblyLinearVelocity
-    if velocity.Magnitude < 0.1 then
-        velocity = hrp.Velocity
-    end
-
-
-    local derivedVel = Vector3.zero
-    local lastPos = PredictLastPos[playerKey]
-    local lastTick = PredictLastTick[playerKey]
-    if lastPos and lastTick then
-        local dt = now - lastTick
-        if dt > 0 and dt < 1 then
-            derivedVel = (hrp.Position - lastPos) / dt
-        end
-    end
-    PredictLastPos[playerKey] = hrp.Position
-    PredictLastTick[playerKey] = now
-
-
-    local finalVel = velocity
-    if derivedVel.Magnitude > velocity.Magnitude then
-        finalVel = derivedVel
-    end
-
-    local speed = finalVel.Magnitude
-    local amount = 0.08 + speed * 0.0016
-    if amount > 0.5 then amount = 0.5 end
-
-    local predictedPos = hrp.Position + finalVel * amount
-    return CFrame.new(predictedPos) * (baseCFrame - baseCFrame.Position)
-end
-
-RJR[L("传送")]:Toggle({
-    Title = L("直接传送至玩家"),
-    Value = _G.G_Teleport,
-    Callback = function(bool)
-        _G.G_Teleport = bool
-        if bool and _G.G_SelectPly == "" then
-            WindUI:Notify({ Title = L("操作失败"), Content = L("请先选择目标玩家"), Duration = 2 })
-            _G.G_Teleport = false
-            return
-        end
-        task.spawn(function()
-            local VirtualUser = game:GetService("VirtualUser")
-            if _G.G_Teleport == false then
-                local TargetPlr = Players:FindFirstChild(_G.G_SelectPly)
-                if TargetPlr and TargetPlr.Character and TargetPlr.Character:FindFirstChild("HumanoidRootPart") then
-                    TargetPlr.Character.HumanoidRootPart.Size = Vector3.new(2, 2, 1)
-                end
-                WindUI:Notify({ Title = L("Bypass关闭"), Content = L("已恢复目标玩家状态"), Duration = 2 })
-                return
-            end
-            WindUI:Notify({ 
-                Title = L("传送开启"), 
-                Content = L("已开始传送（偏移X:").._G.G_TeleportOffsetX.." Y:".._G.G_TeleportOffsetY.." Z:".._G.G_TeleportOffsetZ.."）", 
-                Duration = 2 
-            })
-            while _G.G_Teleport do task.wait()
-                pcall(function()
-                    local TargetPlr = Players:FindFirstChild(_G.G_SelectPly)
-                    if not LocalPlayer.Character or not LocalPlayer.Character.HumanoidRootPart or not TargetPlr or not TargetPlr.Character or not TargetPlr.Character.HumanoidRootPart then
-                        _G.G_Teleport = false
-                        if TargetPlr and TargetPlr.Character and TargetPlr.Character.HumanoidRootPart then
-                            TargetPlr.Character.HumanoidRootPart.Size = Vector3.new(2,2,1)
-                        end
-                        WindUI:Notify({ Title = L("传送中断"), Content = L("目标/本地玩家角色异常"), Duration = 2 })
-                        return
-                    end
-                    local targetCFrame = GetPredictedCFrame(TargetPlr.Character.HumanoidRootPart) + Vector3.new(_G.G_TeleportOffsetX, _G.G_TeleportOffsetY, _G.G_TeleportOffsetZ)
-                    LocalPlayer.Character.HumanoidRootPart.CFrame = targetCFrame
-                    TargetPlr.Character.HumanoidRootPart.Size = Vector3.new(60,60,60)
-                    VirtualUser:CaptureController()
-                    VirtualUser:Button1Down(Vector2.new(1280, 672))
-                end)
-            end
-        end)
-    end
-})
-
 local function requestEntrance(pos)
     local args = {
         [1] = "requestEntrance",
@@ -3663,9 +3705,13 @@ elseif World3 then
     }
 end
 
+-- ========= 追人传送系统(锁人2 / 传送至最近玩家)=========
+-- 整段包在 do...end 内:释放顶层 local 寄存器(主 chunk 上限 200)
+do
+
 local function GetNearestEntranceToTarget(targetPos, myPos)
     local bestName, bestPos = nil, nil
-    local bestDist = (targetPos - myPos).Magnitude  
+    local bestDist = (targetPos - myPos).Magnitude
     for name, pos in pairs(TeleportLocations) do
         local d = (targetPos - pos).Magnitude
         if d < bestDist then
@@ -3677,117 +3723,182 @@ local function GetNearestEntranceToTarget(targetPos, myPos)
     return bestName, bestPos
 end
 
-local Lock2Connection
-local Lock2LastEntrance = 0
-local LockOrbitLastRoll = 0
-local LockOrbitDX = 0
-local LockOrbitDY = 0
-local LockOrbitDZ = 0
-local function GetLockOrbitPos(targetPos)
-    if tick() - LockOrbitLastRoll > 0.08 + math.random() * 0.07 then
-        LockOrbitLastRoll = tick()
-        local function rnd() return math.random(25, 75) * (math.random() < 0.5 and 1 or -1) end
-        LockOrbitDX = rnd()
-        LockOrbitDY = rnd()
-        LockOrbitDZ = rnd()
-    end
-    return targetPos + Vector3.new(LockOrbitDX, LockOrbitDY, LockOrbitDZ)
+local ChaseCFG = {
+    snapDist       = 70,   -- 进入该距离后直接对齐目标 CFrame
+    tweenSpeed     = 240,  -- 追人平滑移动速度(studs/s)
+    snapInterval   = 0.01,  -- 对齐频率(秒/次)
+    predictLead    = 0.18,  -- 对齐时按目标速度外推的秒数
+    sampleInterval = 0.08,  -- 目标测速采样间隔
+    quickTpDist    = 2500,  -- 超过该距离借快捷传送点
+    quickTpCd      = 3,     -- 快捷传送冷却秒数
+    quickTpWait    = 0.3,   -- 快捷传送落地后暂停移动的秒数
+}
+
+local ChaseActive = nil
+local ChaseConn = nil
+local ChaseLastQuickTp = 0
+local ChaseLastSnap = 0
+local ChaseResumeAt = 0            -- 该时间点之前暂停移动(快捷传送后等待)
+local ChaseSample = nil            -- { pos = Vector3, t = tick }
+
+local function ChaseStop()
+    if ChaseConn then ChaseConn:Disconnect() ChaseConn = nil end
+    StopTween()
+    ChaseActive = nil
+    ChaseResumeAt = 0
+    ChaseSample = nil
 end
 
-RJR[L("传送")]:Toggle({
+local function ChaseStart(mode)
+    ChaseStop()
+    ChaseActive = mode
+    ChaseLastQuickTp = 0
+    ChaseConn = RunService.Stepped:Connect(function()
+        if not ChaseActive then return end
+        if tick() < ChaseResumeAt then return end
+        local myChar = LocalPlayer.Character
+        local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
+        local myHum = myChar and myChar:FindFirstChildOfClass("Humanoid")
+        if not myHRP or not myHum or myHum.Health <= 0 then
+            return
+        end
+
+        -- 快捷路径统一由「锁人快捷路径」开关控制,两种模式共用
+        local tH, useQuickPath = nil, _G.G_LockQuickPath ~= false
+        if ChaseActive == "player" then
+            local tPlr = Players:FindFirstChild(_G.G_SelectPly)
+            tH = tPlr and tPlr.Character and tPlr.Character:FindFirstChild("HumanoidRootPart")
+        elseif ChaseActive == "nearest" then
+            local bestDist = math.huge
+            for _, p in ipairs(Players:GetPlayers()) do
+                if p ~= LocalPlayer then
+                    local c = p.Character
+                    local h = c and c:FindFirstChild("HumanoidRootPart")
+                    local hum = c and c:FindFirstChildOfClass("Humanoid")
+                    if h and hum and hum.Health > 0 then
+                        local d = (h.Position - myHRP.Position).Magnitude
+                        if d < bestDist then bestDist, tH = d, h end
+                    end
+                end
+            end
+        end
+        if not tH then return end
+
+        local targetPos = tH.Position
+        local myPos = myHRP.Position
+        local dist = (myPos - targetPos).Magnitude
+
+        -- 超远距离先借快捷传送点接近
+        if useQuickPath and next(TeleportLocations) and dist > ChaseCFG.quickTpDist and tick() - ChaseLastQuickTp > ChaseCFG.quickTpCd then
+            local entName, entPos = GetNearestEntranceToTarget(targetPos, myPos)
+            if entName and entPos then
+                ChaseLastQuickTp = tick()
+                ChaseResumeAt = math.huge   -- 整个快捷传送流程期间暂停移动
+                -- 先停止进行中的平滑传送并恢复正常状态,静止 0.3 秒再传送,
+                -- 避免移动途中触发快捷传送导致卡住
+                StopTween()
+                task.wait(ChaseCFG.quickTpWait)
+                if not ChaseActive then return end
+                requestEntrance(entPos)
+                if not ChaseActive then return end
+                -- 落地后等一帧,再垂直上升 100 studs
+                task.wait()
+                if not ChaseActive then return end
+                pcall(function()
+                    local char = LocalPlayer.Character
+                    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+                    if hrp then
+                        hrp.AssemblyLinearVelocity = Vector3.zero
+                        hrp.CFrame = hrp.CFrame + Vector3.new(0, 100, 0)
+                    end
+                end)
+                ChaseResumeAt = tick() + ChaseCFG.quickTpWait  -- 上升后再等 0.3 秒开始追踪
+                ChaseSample = nil
+                return
+            end
+        end
+
+        -- 采样目标位置估算速度,对齐时做预判
+        local vel = Vector3.zero
+        local now = tick()
+        if ChaseSample then
+            local dt = now - ChaseSample.t
+            if dt > 0 and dt < 1 and (targetPos - ChaseSample.pos).Magnitude <= 500 then
+                vel = (targetPos - ChaseSample.pos) / dt
+            end
+        end
+        if not ChaseSample or now - ChaseSample.t >= ChaseCFG.sampleInterval then
+            ChaseSample = { pos = targetPos, t = now }
+        end
+
+        local off = Vector3.new(_G.G_TeleportOffsetX, _G.G_TeleportOffsetY, _G.G_TeleportOffsetZ)
+
+        if dist <= ChaseCFG.snapDist then
+            StopTween()   -- 取消进行中的平滑传送,避免与对齐写入互相拉扯
+            myHRP.AssemblyLinearVelocity = Vector3.zero
+            -- 每 0.01 秒对齐到目标 CFrame + 速度预判 + XYZ偏移(保留目标朝向)
+            if now - ChaseLastSnap >= ChaseCFG.snapInterval then
+                ChaseLastSnap = now
+                pcall(function() myHRP.CFrame = tH.CFrame + vel * ChaseCFG.predictLead + off end)
+            end
+        else
+            -- 与「平滑传送至玩家」同款逻辑:每帧 topos 重定目标(ChaseCFG.tweenSpeed studs/s)
+            topos(tH.CFrame + off, ChaseCFG.tweenSpeed)
+        end
+    end)
+end
+
+local Lock2Toggle = RJR[L("传送")]:Toggle({
     Title = L("锁人2"),
     Value = _G.G_Lock2,
     Callback = function(value)
         _G.G_Lock2 = value
-        if value and _G.G_SelectPly == "" then
-            WindUI:Notify({ Title = L("操作失败"), Content = L("请先选择目标玩家"), Duration = 2 })
-            _G.G_Lock2 = false
-            return
-        end
-
-        if Lock2Connection then
-            Lock2Connection:Disconnect()
-            Lock2Connection = nil
-        end
-
         if value then
-            WindUI:Notify({ Title = L("锁人2开启"), Content = L("自动选最近传送点接近，350米内直接锁定"), Duration = 2 })
-            Lock2LastEntrance = 0
-
-            Lock2Connection = RunService.Stepped:Connect(function()
-                if not _G.G_Lock2 then
-                    if Lock2Connection then
-                        Lock2Connection:Disconnect()
-                        Lock2Connection = nil
-                    end
-                    return
-                end
-
-                local myChar = LocalPlayer.Character
-                local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
-                local TargetPlr = Players:FindFirstChild(_G.G_SelectPly)
-                if not myHRP or not TargetPlr or not TargetPlr.Character or not TargetPlr.Character:FindFirstChild("HumanoidRootPart") then
-                    return
-                end
-                local tHRP = TargetPlr.Character.HumanoidRootPart
-
-                local targetCFrame = GetPredictedCFrame(tHRP) + Vector3.new(_G.G_TeleportOffsetX, _G.G_TeleportOffsetY, _G.G_TeleportOffsetZ)
-                local targetPos = targetCFrame.Position
-                local myPos = myHRP.Position
-                local distance = (targetPos - myPos).Magnitude
-
-    
-                if math.abs(myPos.Y - targetPos.Y) > 0.5 then
-                    myHRP.CFrame = CFrame.new(myPos.X, targetPos.Y, myPos.Z)
-                end
-
-            
-                if _G.G_LockQuickPath and distance > 1000 and tick() - Lock2LastEntrance > 3 then
-                    local entName, entPos = GetNearestEntranceToTarget(targetPos, myPos)
-                    if entName and entPos and entName ~= "P1" and entName ~= "P2" then
-                        requestEntrance(entPos)
-                        Lock2LastEntrance = tick()
-                        return
-                    end
-                end
-                if distance > 350 then
-                    topos(targetCFrame)
-                elseif _G.G_LockOrbit then
-                    StopTween()
-                    myHRP.CFrame = CFrame.new(GetLockOrbitPos(targetPos))
-                else             
-                    StopTween()
-                    myHRP.CFrame = targetCFrame
-                end
-            end)
-        else
-            if Lock2Connection then
-                Lock2Connection:Disconnect()
-                Lock2Connection = nil
+            if _G.G_SelectPly == "" then
+                WindUI:Notify({ Title = L("操作失败"), Content = L("请先选择目标玩家"), Duration = 2 })
+                _G.G_Lock2 = false
+                return
             end
-            StopTween()
+            _G.G_TweenNearest = false
+            ChaseStart("player")
+            WindUI:Notify({ Title = L("锁人2开启"), Content = L("平滑追踪目标，近距离自动锁定"), Duration = 2 })
+        else
+            ChaseStop()
             WindUI:Notify({ Title = L("锁人2关闭"), Content = L("已停止锁定目标"), Duration = 2 })
         end
-    end
-})
-
-RJR[L("传送")]:Toggle({
-    Title = L("随机偏移锁人"),
-    Value = _G.G_LockOrbit,
-    Callback = function(v)
-        _G.G_LockOrbit = v
         SaveConfiguration()
     end
 })
 
-RJR[L("传送")]:Toggle({
-    Title = L("锁人预判 (对抗飞行)"),
-    Value = _G.G_TeleportPredict,
-    Callback = function(v)
-        _G.G_TeleportPredict = v
+local NearestToggle = RJR[L("传送")]:Toggle({
+    Title = L("传送至最近玩家"),
+    Value = _G.G_TweenNearest,
+    Callback = function(value)
+        _G.G_TweenNearest = value
+        if value then
+            _G.G_Lock2 = false
+            ChaseStart("nearest")
+            WindUI:Notify({ Title = L("最近玩家传送开启"), Content = L("自动借快捷传送点接近最近玩家"), Duration = 2 })
+        else
+            ChaseStop()
+            WindUI:Notify({ Title = L("最近玩家传送关闭"), Content = L("已停止锁定目标"), Duration = 2 })
+        end
         SaveConfiguration()
     end
 })
+
+-- 用 WindUI 的 Lock/Unlock 控制开关可用性
+pcall(function()
+    if Lock2Toggle.Unlock then Lock2Toggle:Unlock() end
+    if NearestToggle.Unlock then NearestToggle:Unlock() end
+end)
+
+if _G.G_Lock2 and _G.G_SelectPly ~= "" then
+    ChaseStart("player")
+elseif _G.G_TweenNearest then
+    ChaseStart("nearest")
+end
+end
 
 RJR[L("传送")]:Toggle({
     Title = L("锁人快捷路径"),
@@ -3877,6 +3988,7 @@ RJR[L("设置")]:Button({
         WindUI:Notify({ Title = L("加载配置"), Content = L("加载完成"), Duration = 2 })
     end
 })
+
 
 
 
@@ -4066,15 +4178,20 @@ local mouse = LocalPlayer:GetMouse()
 local oldIndex
 pcall(function()
     oldIndex = hookmetamethod(game, "__index", function(self, key)
-        if _G.G_SilentAimM1R and IsCurrentSkillEnabled() and currentSilentAimTarget and not checkcaller() and self == mouse then
-            local tp = currentSilentAimTarget.Position
-            local cp = workspace.CurrentCamera.CFrame.Position
-            if key == "Hit" then return CFrame.new(tp)
-            elseif key == "Target" then return currentSilentAimTarget
-            elseif key == "UnitRay" then return Ray.new(cp, (tp - cp).Unit)
-            elseif key == "Origin" then return cp
-            elseif key == "Direction" then return (tp - cp).Unit
-            end
+        -- M1R 自瞄未开启:最快的路径,直接透传(不跑 checkcaller/技能判断)
+        if not _G.G_SilentAimM1R or self ~= mouse then
+            return oldIndex(self, key)
+        end
+        if not currentSilentAimTarget or not IsCurrentSkillEnabled() or checkcaller() then
+            return oldIndex(self, key)
+        end
+        local tp = currentSilentAimTarget.Position
+        local cp = workspace.CurrentCamera.CFrame.Position
+        if key == "Hit" then return CFrame.new(tp)
+        elseif key == "Target" then return currentSilentAimTarget
+        elseif key == "UnitRay" then return Ray.new(cp, (tp - cp).Unit)
+        elseif key == "Origin" then return cp
+        elseif key == "Direction" then return (tp - cp).Unit
         end
         return oldIndex(self, key)
     end)
@@ -4082,6 +4199,13 @@ end)
 
 
 RunService.RenderStepped:Connect(function()
+    -- 自瞄与红线都关着时不取鼠标、不选区,直接返回(每帧零表分配、零钩子税)
+    if not _G.G_SilentAimM1R and not _G.G_SilentAimSkill and not _G.G_SilentAimShowLine then
+        currentSilentAimTarget = nil
+        Line.Visible = false
+        return
+    end
+
     local p = UIS:GetMouseLocation()
     if _G.FOVMode == "屏幕中心" or p.X <= 0 or p.Y <= 0 then
         local v = workspace.CurrentCamera.ViewportSize
@@ -4121,7 +4245,6 @@ local LockHotkey = {
     active = false,
     target = nil,
     distance = 0,
-    entranceTick = 0,
     uiTick = 0,
 }
 
@@ -4217,7 +4340,6 @@ local function LockHotkeyStartLoop()
 
     LockHotkey.target = targetPlayer
     LockHotkey.active = true
-    LockHotkey.entranceTick = 0
     LockHotkey.uiTick = 0
     LockHotkeyUpdateUI()
 
@@ -4247,40 +4369,12 @@ local function LockHotkeyStartLoop()
             local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
             if not myHRP then return end
 
-            local targetCFrame = GetPredictedCFrame(tHRP) + Vector3.new(_G.G_TeleportOffsetX, _G.G_TeleportOffsetY, _G.G_TeleportOffsetZ)
+            local targetCFrame = tHRP.CFrame + Vector3.new(_G.G_TeleportOffsetX, _G.G_TeleportOffsetY, _G.G_TeleportOffsetZ)
             LockHotkey.distance = (targetCFrame.Position - myHRP.Position).Magnitude
 
-            if _G.G_LockHotkeyMode == "锁人2" then
-                local targetPos = targetCFrame.Position
-                local myPos = myHRP.Position
-                local distance = LockHotkey.distance
-
-                if math.abs(myPos.Y - targetPos.Y) > 0.5 then
-                    myHRP.CFrame = CFrame.new(myPos.X, targetPos.Y, myPos.Z)
-                end
-
-                if _G.G_LockQuickPath and distance > 1000 and tick() - LockHotkey.entranceTick > 3 then
-                    local entName, entPos = GetNearestEntranceToTarget(targetPos, myPos)
-                    if entName and entPos then
-                        requestEntrance(entPos)
-                        LockHotkey.entranceTick = tick()
-                        return
-                    end
-                end
-                if distance > 300 then
-                    topos(targetCFrame)
-                elseif _G.G_LockOrbit then
-                    StopTween()
-                    myHRP.CFrame = CFrame.new(GetLockOrbitPos(targetPos))
-                else
-                    StopTween()
-                    myHRP.CFrame = targetCFrame
-                end
-            else
-                myHRP.CFrame = targetCFrame
-                VirtualUser:CaptureController()
-                VirtualUser:Button1Down(Vector2.new(1280, 672))
-            end
+            myHRP.CFrame = targetCFrame
+            VirtualUser:CaptureController()
+            VirtualUser:Button1Down(Vector2.new(1280, 672))
         end)
 
         if ok and tick() - LockHotkey.uiTick > 0.1 then
@@ -4676,16 +4770,6 @@ RJR[L("绘制")]:Keybind({
     end
 })
 
-RJR[L("绘制")]:Dropdown({
-    Title = L("锁人模式"),
-    Values = {"锁人1", "锁人2"},
-    Value = _G.G_LockHotkeyMode,
-    Callback = function(v)
-        _G.G_LockHotkeyMode = v
-        SaveConfiguration()
-    end
-})
-
 if _G.G_LockHotkey then StartLockHotkey() end
 
 RJR[L("绘制")]:Divider()
@@ -4760,7 +4844,7 @@ do
 
     RJR[L("绘制")]:Toggle({
         Title = L("自动瞬步"),
-        Desc = "开这个你就受着吧",
+        Desc = "",
         Value = _G.G_AutoSoru,
         Callback = function(v)
             _G.G_AutoSoru = v
