@@ -618,31 +618,59 @@ if not availableThemesCheck[_G.Theme] then
 end
 WindUI:SetTheme(_G.Theme)
 local Window = WindUI:CreateWindow({
-    Title = L("VoidVIP"),
+    Title = L("Void中心"),
     Icon = "",
     Author = "by Void",
     Folder = "WindUI",
     Size = UDim2.fromOffset(580, 460),
     Transparent = true,
-    Theme = _G.Theme,
+    Theme = _G.G_Theme,
     Acrylic = false,
     HideSearchBar = false,
     SideBarWidth = 200,
     OpenButton = {
-        Title = "Void-BF",
+        Title = "VoidBF-PVP",
         CornerRadius = UDim.new(1, 0),
         StrokeThickness = 3,
         Enabled = true,
         OnlyMobile = false,
         Draggable = true,
         OnlyIcon = false,
-        Color = ColorSequence.new(
-            Color3.fromHex("#FF4444"),
-            Color3.fromHex("#FF8800")
-        ),
+        Color = ColorSequence.new({
+            ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 255, 255)),
+            ColorSequenceKeypoint.new(0.33, Color3.fromRGB(135, 206, 235)),
+            ColorSequenceKeypoint.new(0.66, Color3.fromRGB(255, 183, 197)),
+            ColorSequenceKeypoint.new(1, Color3.fromRGB(0, 0, 0))
+        }),
     },
     ToggleKey = Enum.KeyCode.G,
 })
+local colors = {
+    Color3.fromRGB(255,255,255),
+    Color3.fromRGB(135,206,235),
+    Color3.fromRGB(255,183,197),
+    Color3.fromRGB(0,0,0)
+}
+local connection
+task.spawn(function()
+    connection = game:GetService("RunService").Heartbeat:Connect(function()
+        local t = tick() * 0.8
+        local keypoints = {}
+        for i = 0, 10 do
+            local x = i / 10
+            local phase = (x - t) % 1
+            local idx = math.floor(phase * #colors) % #colors + 1
+            local nextIdx = idx % #colors + 1
+            local frac = (phase * #colors) % 1
+            local currentColor = colors[idx]:Lerp(colors[nextIdx], frac)
+            table.insert(keypoints, ColorSequenceKeypoint.new(x, currentColor))
+        end
+        Window:EditOpenButton({ Color = ColorSequence.new(keypoints) })
+    end)
+end)
+Window:OnDestroy(function()
+    if connection then connection:Disconnect() end
+end)
 local Tabs = {
     [L("主要功能")] = Window:Section({ Title = L("主要功能"), Opened = true }),
     [L("设置")] = Window:Section({ Title = L("设置"), Opened = true }),
