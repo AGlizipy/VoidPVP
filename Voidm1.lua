@@ -30,7 +30,7 @@ for key, defaultValue in pairs({
     jumpEnabled             = false,
     InfiniteJump            = false,
     Fly                     = false,
-    FlySpeed                = 50,
+    FlySpeed                = 250,
     Noclip                  = false,
     DashLengthEnabled       = false,
     DashLength              = 5,
@@ -627,7 +627,7 @@ local Window = WindUI:CreateWindow({
     Folder = "WindUI",
     Size = UDim2.fromOffset(580, 460),
     Transparent = true,
-    Theme = _G.G_Theme,
+    Theme = _G.Theme,
     Acrylic = false,
     HideSearchBar = false,
     SideBarWidth = 200,
@@ -689,7 +689,7 @@ local RJR = {
     [L("服务器")]   = Tabs[L("设置")]:Tab({ Title = L("服务器"), Icon = "server" }),
     [L("设置")]     = Tabs[L("设置")]:Tab({ Title = L("设置"), Icon = "settings" }),
 }
-local M1_RANGE = 1000
+local M1_RANGE = 300
 local Net = ReplicatedStorage:WaitForChild("Modules"):WaitForChild("Net")
 local RegisterAttack = Net:WaitForChild("RE/RegisterAttack")
 local RegisterHit = Net:WaitForChild("RE/RegisterHit")
@@ -762,13 +762,13 @@ end
 task.spawn(function()
     while true do
         if not (_G.FastAttackMobs or _G.FastAttackPlayers) then
-            task.wait(0.2)
+            task.wait(0.1)
             continue
         end
         local startTime = tick()
         pcall(PerformAttack, _G.FastAttackMode ~= "模式1")
         local elapsed = tick() - startTime
-        task.wait(math.max(0 - elapsed, 0))
+        task.wait()
     end
 end)
 RJR[L("杀戮光环")]:Dropdown({
@@ -915,7 +915,7 @@ task.spawn(function()
         return isRubber
     end
 
-    local AttackRange = 450
+    local AttackRange = 600
 
     local function getClosestSeaTarget()
         local char = player.Character
@@ -4235,7 +4235,7 @@ local ChaseAPI = { Start = nil, Stop = nil, HotkeyTarget = nil }
 do
 
 local ChaseCFG = {
-    snapDist       = 70,
+    snapDist       = 600,
     snapInterval   = 0.01,
     predictLead    = 0.18,
     sampleInterval = 0.08,
