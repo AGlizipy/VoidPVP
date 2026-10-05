@@ -689,7 +689,7 @@ local RJR = {
     [L("服务器")]   = Tabs[L("设置")]:Tab({ Title = L("服务器"), Icon = "server" }),
     [L("设置")]     = Tabs[L("设置")]:Tab({ Title = L("设置"), Icon = "settings" }),
 }
-local M1_RANGE = 300
+local M1_RANGE = 800
 local Net = ReplicatedStorage:WaitForChild("Modules"):WaitForChild("Net")
 local RegisterAttack = Net:WaitForChild("RE/RegisterAttack")
 local RegisterHit = Net:WaitForChild("RE/RegisterHit")
@@ -762,13 +762,13 @@ end
 task.spawn(function()
     while true do
         if not (_G.FastAttackMobs or _G.FastAttackPlayers) then
-            task.wait(0.1)
+            task.wait(0.2)
             continue
         end
         local startTime = tick()
         pcall(PerformAttack, _G.FastAttackMode ~= "模式1")
         local elapsed = tick() - startTime
-        task.wait()
+        task.wait(math.max(0 - elapsed, 0))
     end
 end)
 RJR[L("杀戮光环")]:Dropdown({
@@ -915,7 +915,7 @@ task.spawn(function()
         return isRubber
     end
 
-    local AttackRange = 600
+    local AttackRange = 800
 
     local function getClosestSeaTarget()
         local char = player.Character
@@ -2199,7 +2199,7 @@ RJR[L("主要功能")]:Toggle({
 })
 do
     local FLY_MIN_SPEED, FLY_MAX_SPEED = 1, 10000
-    local flySpeed = 190
+    local flySpeed = 250
     local FlyOn = false
     local FlyLoopConn = nil
     local FlyHoldConn = nil
