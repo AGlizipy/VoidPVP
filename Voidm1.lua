@@ -13,7 +13,7 @@ for key, defaultValue in pairs({
     FastAttackPlayers       = true,
     GunM1Mobs               = false,
     GunM1Players            = false,
-    M1FireInterval          = 0,
+    M1FireInterval          = 0.1,
     FruitM1                 = false,
     VoidFruitM1             = false,
     AutoHaki                = false,
@@ -387,7 +387,7 @@ end)
 local Translations = {
     ["中文"] = {},
     ["English"] = {
-        ["Void中心"] = "Void",
+        ["Void中心"] = "Voidvip",
         ["主要功能"] = "Main",
         ["杀戮光环"] = "Aura",
         ["ESP"] = "ESP",
@@ -621,7 +621,7 @@ if not availableThemesCheck[_G.Theme] then
 end
 WindUI:SetTheme(_G.Theme)
 local Window = WindUI:CreateWindow({
-    Title = L("Void中心"),
+    Title = L("VoidVIP"),
     Icon = "",
     Author = "by Void",
     Folder = "WindUI",
@@ -632,48 +632,20 @@ local Window = WindUI:CreateWindow({
     HideSearchBar = false,
     SideBarWidth = 200,
     OpenButton = {
-        Title = "VoidBF-PVP",
+        Title = "Void-VIP",
         CornerRadius = UDim.new(1, 0),
         StrokeThickness = 3,
         Enabled = true,
         OnlyMobile = false,
         Draggable = true,
         OnlyIcon = false,
-        Color = ColorSequence.new({
-            ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 255, 255)),
-            ColorSequenceKeypoint.new(0.33, Color3.fromRGB(135, 206, 235)),
-            ColorSequenceKeypoint.new(0.66, Color3.fromRGB(255, 183, 197)),
-            ColorSequenceKeypoint.new(1, Color3.fromRGB(0, 0, 0))
-        }),
+        Color = ColorSequence.new(
+            Color3.fromHex("#87CEEB"),
+            Color3.fromHex("#FFB7C5")
+        ),
     },
     ToggleKey = Enum.KeyCode.G,
 })
-local colors = {
-    Color3.fromRGB(255,255,255),
-    Color3.fromRGB(135,206,235),
-    Color3.fromRGB(255,183,197),
-    Color3.fromRGB(0,0,0)
-}
-local connection
-task.spawn(function()
-    connection = game:GetService("RunService").Heartbeat:Connect(function()
-        local t = tick() * 0.8
-        local keypoints = {}
-        for i = 0, 10 do
-            local x = i / 10
-            local phase = (x - t) % 1
-            local idx = math.floor(phase * #colors) % #colors + 1
-            local nextIdx = idx % #colors + 1
-            local frac = (phase * #colors) % 1
-            local currentColor = colors[idx]:Lerp(colors[nextIdx], frac)
-            table.insert(keypoints, ColorSequenceKeypoint.new(x, currentColor))
-        end
-        Window:EditOpenButton({ Color = ColorSequence.new(keypoints) })
-    end)
-end)
-Window:OnDestroy(function()
-    if connection then connection:Disconnect() end
-end)
 local Tabs = {
     [L("主要功能")] = Window:Section({ Title = L("主要功能"), Opened = true }),
     [L("设置")] = Window:Section({ Title = L("设置"), Opened = true }),
@@ -689,7 +661,7 @@ local RJR = {
     [L("服务器")]   = Tabs[L("设置")]:Tab({ Title = L("服务器"), Icon = "server" }),
     [L("设置")]     = Tabs[L("设置")]:Tab({ Title = L("设置"), Icon = "settings" }),
 }
-local M1_RANGE = 800
+local M1_RANGE = 600
 local Net = ReplicatedStorage:WaitForChild("Modules"):WaitForChild("Net")
 local RegisterAttack = Net:WaitForChild("RE/RegisterAttack")
 local RegisterHit = Net:WaitForChild("RE/RegisterHit")
@@ -768,7 +740,7 @@ task.spawn(function()
         local startTime = tick()
         pcall(PerformAttack, _G.FastAttackMode ~= "模式1")
         local elapsed = tick() - startTime
-        task.wait(math.max(0 - elapsed, 0))
+        task.wait(math.max(0.02 - elapsed, 0.001))
     end
 end)
 RJR[L("杀戮光环")]:Dropdown({
