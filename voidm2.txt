@@ -593,7 +593,7 @@ local WindUI = loadstring(request({
 }).Body)()
 local availableThemesCheck = WindUI:GetThemes()
 if not availableThemesCheck[_G.Theme] then
-    _G.Theme = "Dark"
+    _G.Theme = "Violet"
 end
 WindUI:SetTheme(_G.Theme)
 local Window = WindUI:CreateWindow({
