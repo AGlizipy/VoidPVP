@@ -1,0 +1,1671 @@
+-- =====================================================
+--  扫描器 + 邪恶莫蒂传送门枪 + 冲刺（移动端 HUD）
+-- =====================================================
+
+local Players          = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local RunService       = game:GetService("RunService")
+local Lighting         = game:GetService("Lighting")
+local TweenService     = game:GetService("TweenService")
+local SoundService     = game:GetService("SoundService")
+local StarterGui       = game:GetService("StarterGui")
+
+local LocalPlayer = Players.LocalPlayer
+local Camera      = workspace.CurrentCamera
+local p           = LocalPlayer
+local m           = p:GetMouse()
+
+-- =====================================================
+--  扫描器
+-- =====================================================
+local scannerSoundTemplate = Instance.new("Sound")
+scannerSoundTemplate.Name = "扫描音效"
+scannerSoundTemplate.SoundId = "rbxassetid://129289790297292"
+scannerSoundTemplate.Volume = 1
+scannerSoundTemplate.Parent = SoundService
+
+local teleportSoundTemplate = Instance.new("Sound")
+teleportSoundTemplate.Name = "传送音效"
+teleportSoundTemplate.SoundId = "rbxassetid://6859643048"
+teleportSoundTemplate.Volume = 1
+teleportSoundTemplate.Parent = SoundService
+
+local activeScannerSound = nil
+
+local function playSound(template)
+	if not template then return nil end
+	local clone = template:Clone()
+	clone.Parent = SoundService
+	clone:Play()
+	clone.Ended:Connect(function() if clone then clone:Destroy() end end)
+	return clone
+end
+
+local function stopScannerSound()
+	if activeScannerSound then
+		activeScannerSound:Stop()
+		activeScannerSound:Destroy()
+		activeScannerSound = nil
+	end
+end
+
+local ColorCorrection = Instance.new("ColorCorrectionEffect")
+ColorCorrection.Name = "扫描滤镜"
+ColorCorrection.TintColor = Color3.fromRGB(255, 200, 70)
+ColorCorrection.Brightness = 0.05
+ColorCorrection.Contrast = 0.2
+ColorCorrection.Enabled = false
+ColorCorrection.Parent = Lighting
+
+local characterHighlight = Instance.new("Highlight")
+characterHighlight.Name = "扫描高亮"
+characterHighlight.FillColor = Color3.fromRGB(255, 235, 50)
+characterHighlight.FillTransparency = 0.35
+characterHighlight.OutlineColor = Color3.fromRGB(255, 255, 100)
+characterHighlight.OutlineTransparency = 0
+characterHighlight.Enabled = false
+characterHighlight.Parent = workspace
+
+local scannerActive = false
+local hasTarget = false
+local stickyTarget = nil
+
+-- 缩小版扫描器界面
+local scannerGui = Instance.new("BillboardGui")
+scannerGui.Size = UDim2.new(0, 200, 0, 140)
+scannerGui.AlwaysOnTop = true
+scannerGui.ExtentsOffset = Vector3.new(0, 0, 0)
+scannerGui.Enabled = false
+
+local mainContainer = Instance.new("Frame")
+mainContainer.Size = UDim2.new(1, 0, 1, 0)
+mainContainer.BackgroundTransparency = 1
+mainContainer.Parent = scannerGui
+
+local topLabel = Instance.new("TextLabel")
+topLabel.Size = UDim2.new(1, 0, 0, 16)
+topLabel.Position = UDim2.new(0, 0, 0, 6)
+topLabel.BackgroundTransparency = 1
+topLabel.TextColor3 = Color3.fromRGB(255, 220, 100)
+topLabel.TextStrokeColor3 = Color3.fromRGB(80, 40, 0)
+topLabel.TextStrokeTransparency = 0.3
+topLabel.Font = Enum.Font.GothamBlack
+topLabel.TextSize = 13
+topLabel.Text = "扫描结果"
+topLabel.Visible = false
+topLabel.Parent = mainContainer
+
+local scannerLogo = Instance.new("ImageLabel")
+scannerLogo.Size = UDim2.new(0, 100, 0, 60)
+scannerLogo.Position = UDim2.new(0.5, 0, 0.5, 0)
+scannerLogo.AnchorPoint = Vector2.new(0.5, 0.5)
+scannerLogo.BackgroundTransparency = 1
+scannerLogo.Image = "rbxassetid://134901522615876"
+scannerLogo.ImageColor3 = Color3.fromRGB(255, 255, 255)
+scannerLogo.Parent = mainContainer
+
+local bottomLabel = Instance.new("TextLabel")
+bottomLabel.Size = UDim2.new(1, 0, 0, 20)
+bottomLabel.Position = UDim2.new(0, 0, 1, -26)
+bottomLabel.BackgroundTransparency = 1
+bottomLabel.TextColor3 = Color3.fromRGB(255, 220, 60)
+bottomLabel.TextStrokeColor3 = Color3.fromRGB(100, 30, 0)
+bottomLabel.TextStrokeTransparency = 0.1
+bottomLabel.Font = Enum.Font.GothamBlack
+bottomLabel.TextSize = 16
+bottomLabel.Text = "无结果"
+bottomLabel.Parent = mainContainer
+
+local function scanPlayerInventory(player)
+	if not player then return "无结果" end
+	local character = player.Character
+	local backpack = player:FindFirstChild("Backpack")
+	if character then
+		local heldTool = character:FindFirstChildOfClass("Tool")
+		if heldTool then return string.upper(heldTool.Name) end
+	end
+	if backpack then
+		local knife = backpack:FindFirstChild("Knife")
+		local gun = backpack:FindFirstChild("Gun")
+		if knife then return "刀" end
+		if gun then return "枪" end
+		local anyTool = backpack:FindFirstChildOfClass("Tool")
+		if anyTool then return string.upper(anyTool.Name) end
+	end
+	return "无结果"
+end
+
+local function enableFilter()
+	ColorCorrection.Enabled = true
+	ColorCorrection.TintColor = Color3.fromRGB(255, 255, 255)
+	ColorCorrection.Brightness = 0
+	ColorCorrection.Contrast = 0
+	TweenService:Create(ColorCorrection, TweenInfo.new(0.15), {
+		TintColor = Color3.fromRGB(255, 200, 70),
+		Brightness = 0.05,
+		Contrast = 0.2
+	}):Play()
+end
+
+local function fadeFilterOut(duration)
+	duration = duration or 0.2
+	local tween = TweenService:Create(ColorCorrection, TweenInfo.new(duration), {
+		TintColor = Color3.fromRGB(255, 255, 255),
+		Brightness = 0,
+		Contrast = 0
+	})
+	tween:Play()
+	tween.Completed:Connect(function() ColorCorrection.Enabled = false end)
+end
+
+local function disableScanner()
+	scannerActive = false
+	hasTarget = false
+	stickyTarget = nil
+	stopScannerSound()
+	fadeFilterOut(0.2)
+	scannerGui.Enabled = false
+	scannerGui.Parent = nil
+	characterHighlight.Enabled = false
+	characterHighlight.Adornee = nil
+end
+
+local LOOK_ANGLE_THRESHOLD = 45
+local STICKY_ANGLE_THRESHOLD = 80
+local LOOK_DISTANCE_MAX     = 60
+local STICKY_DISTANCE_MAX   = 90
+
+local scannerRayParams = RaycastParams.new()
+scannerRayParams.FilterType = Enum.RaycastFilterType.Exclude
+scannerRayParams.IgnoreWater = true
+
+local function findPlayerByLook()
+	local camCF = Camera.CFrame
+	local origin = camCF.Position
+	local lookDir = camCF.LookVector
+	local myChar = LocalPlayer.Character
+
+
+	if stickyTarget then
+		if stickyTarget.Parent and stickyTarget.Character then
+			local head = stickyTarget.Character:FindFirstChild("Head")
+			if head then
+				local toTarget = head.Position - origin
+				local dist = toTarget.Magnitude
+				if dist <= STICKY_DISTANCE_MAX and dist > 0.1 then
+					local dot = lookDir:Dot(toTarget.Unit)
+					local angle = math.deg(math.acos(math.clamp(dot, -1, 1)))
+					if angle < STICKY_ANGLE_THRESHOLD then
+						scannerRayParams.FilterDescendantsInstances = {myChar, stickyTarget.Character}
+						local result = workspace:Raycast(origin, toTarget, scannerRayParams)
+						if not result then return stickyTarget, head end
+					end
+				end
+			end
+		end
+		stickyTarget = nil
+	end
+
+	local bestPlayer, bestHead = nil, nil
+	local bestAngle = LOOK_ANGLE_THRESHOLD
+	for _, player in ipairs(Players:GetPlayers()) do
+		if player ~= LocalPlayer and player.Character then
+			local head = player.Character:FindFirstChild("Head")
+			if head then
+				local toTarget = head.Position - origin
+				local dist = toTarget.Magnitude
+				if dist <= LOOK_DISTANCE_MAX and dist > 0.1 then
+					local dot = lookDir:Dot(toTarget.Unit)
+					local angle = math.deg(math.acos(math.clamp(dot, -1, 1)))
+					if angle < bestAngle then
+						scannerRayParams.FilterDescendantsInstances = {myChar, player.Character}
+						local result = workspace:Raycast(origin, toTarget, scannerRayParams)
+						if not result then
+							bestAngle = angle
+							bestPlayer = player
+							bestHead = head
+						end
+					end
+				end
+			end
+		end
+	end
+	if bestPlayer then stickyTarget = bestPlayer end
+	return bestPlayer, bestHead
+end
+
+-- =====================================================
+--  冲刺
+-- =====================================================
+local DASH_COLOR   = Color3.fromRGB(0, 210, 255)
+local DASH_OUTLINE = Color3.fromRGB(170, 245, 255)
+
+local dashMode = "normal"
+local dashSide = -1
+local dashIndicatorLabel = nil
+local teleportCooldown = false
+
+local function spawnGhostFromSnapshot(snapshot)
+	local ghost = Instance.new("Model")
+	ghost.Name = "残影分身"
+	for _, info in ipairs(snapshot) do
+		local part = Instance.new("Part")
+		part.Name = info.Name
+		part.Size = info.Size
+		part.CFrame = info.CFrame
+		part.Color = Color3.fromRGB(130, 200, 255)
+		part.Material = Enum.Material.SmoothPlastic
+		part.Transparency = 0
+		part.Anchored = true
+		part.CanCollide = false
+		part.CanTouch = false
+		part.CanQuery = false
+		part.CastShadow = false
+		part.Parent = ghost
+	end
+	ghost.Parent = workspace
+	local hl = Instance.new("Highlight")
+	hl.FillColor = Color3.fromRGB(130, 200, 255)
+	hl.FillTransparency = 0.15
+	hl.OutlineColor = Color3.fromRGB(200, 235, 255)
+	hl.OutlineTransparency = 0
+	hl.Adornee = ghost
+	hl.Parent = ghost
+	task.spawn(function()
+		task.wait(0.15)
+		for _, d in ipairs(ghost:GetChildren()) do
+			if d:IsA("BasePart") then
+				TweenService:Create(d, TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Transparency = 1}):Play()
+			end
+		end
+		TweenService:Create(hl, TweenInfo.new(0.5), {FillTransparency = 1, OutlineTransparency = 1}):Play()
+		task.wait(0.55)
+		if ghost and ghost.Parent then ghost:Destroy() end
+	end)
+end
+
+local function dashOnce(moveVec)
+	local char = LocalPlayer.Character
+	local hrp = char and char:FindFirstChild("HumanoidRootPart")
+	if not hrp then return false end
+
+	local snapshot = {}
+	for _, part in ipairs(char:GetChildren()) do
+		if part:IsA("BasePart") and part.Name ~= "Head" then
+			table.insert(snapshot, { Name = part.Name, Size = part.Size, CFrame = part.CFrame })
+		end
+	end
+
+	hrp.CFrame = hrp.CFrame + moveVec * 12
+	playSound(teleportSoundTemplate)
+
+	local dh = Instance.new("Highlight")
+	dh.FillColor = DASH_COLOR
+	dh.FillTransparency = 0.2
+	dh.OutlineColor = DASH_OUTLINE
+	dh.OutlineTransparency = 0
+	dh.Parent = char
+	task.delay(0.25, function() if dh then dh:Destroy() end end)
+
+
+	pcall(spawnGhostFromSnapshot, snapshot)
+	return true
+end
+
+local function normalDash()
+	if teleportCooldown then return end
+	local char = LocalPlayer.Character
+	local hrp = char and char:FindFirstChild("HumanoidRootPart")
+	if not hrp then return end
+	teleportCooldown = true
+	local dir = (hrp.CFrame.LookVector + hrp.CFrame.RightVector * dashSide).Unit
+	dashOnce(dir)
+	dashSide = -dashSide
+	task.wait(0.5)
+	teleportCooldown = false
+end
+local function defaultDash()
+	if teleportCooldown then return end
+	local char = LocalPlayer.Character
+	local hrp = char and char:FindFirstChild("HumanoidRootPart")
+	if not hrp then return end
+	teleportCooldown = true
+	dashOnce(hrp.CFrame.LookVector)
+	task.wait(0.5)
+	teleportCooldown = false
+end
+local function doDash()
+	if dashMode == "default" then defaultDash() else normalDash() end
+end
+
+local function updateDashIndicator()
+	if dashIndicatorLabel then
+		dashIndicatorLabel.Text = dashMode == "normal" and "冲刺：普通 [B]" or "冲刺：默认 [B]"
+		dashIndicatorLabel.TextColor3 = DASH_OUTLINE
+	end
+end
+
+local function setDashMode(mode)
+	dashMode = mode
+	updateDashIndicator()
+end
+
+local function toggleDashMode()
+	if dashMode == "normal" then setDashMode("default") else setDashMode("normal") end
+end
+
+-- =====================================================
+--  扫描器心跳
+-- =====================================================
+local raycastInterval = 0.08
+local raycastTimer = 0
+
+RunService.Heartbeat:Connect(function(deltaTime)
+	if not scannerActive then return end
+	raycastTimer = raycastTimer + deltaTime
+	if raycastTimer < raycastInterval then return end
+	raycastTimer = 0
+
+	local foundPlayer, head = findPlayerByLook()
+	if foundPlayer and head then
+		if not hasTarget then
+			hasTarget = true
+			enableFilter()
+			stopScannerSound()
+			activeScannerSound = playSound(scannerSoundTemplate)
+		end
+		scannerGui.Parent = head
+		scannerGui.Enabled = true
+		characterHighlight.Adornee = foundPlayer.Character
+		characterHighlight.Enabled = true
+		local scanResult = scanPlayerInventory(foundPlayer)
+		bottomLabel.Text = scanResult
+		topLabel.Visible = (scanResult ~= "无结果")
+	else
+		if hasTarget then
+			hasTarget = false
+			fadeFilterOut(0.2)
+			stopScannerSound()
+		end
+		scannerGui.Enabled = false
+		characterHighlight.Enabled = false
+		characterHighlight.Adornee = nil
+	end
+end)
+
+local function toggleScanner()
+	scannerActive = not scannerActive
+	if scannerActive then
+		hasTarget = false
+		stickyTarget = nil
+	else
+		disableScanner()
+	end
+end
+
+-- =====================================================
+--  邪恶莫蒂传送门枪
+-- =====================================================
+local GUN_NAME = "邪莫传送枪"
+
+local GUN_STYLE = {
+	type         = "model",
+	assetId      = "rbxassetid://92031078038492",
+	muzzleOffset = CFrame.new(0, 0, -2),
+	pos   = { x = 0.00, y = 0.65, z = -0.25 },
+	rot   = { x = 105,  y = 0,    z = 0    },
+	scale = 1.40,
+}
+
+local gunConfig = {
+	posX = 0.00,  posY = 0.65,  posZ = -0.25,
+	rotX = 105,    rotY = 0,     rotZ = 0,
+	scale = 1.40,
+}
+local EM_PORTAL_TEXTURE = "rbxassetid://108385067060457"
+local CHILL_ASSET_ID   = "rbxassetid://14101261109"
+local GARAGE_ASSET_ID  = "rbxassetid://10807694957"
+local RETRO_ASSET_ID   = "rbxassetid://1583359288"
+
+local RANGE, PORTAL_GAP, PORTAL_SIZE, COOLDOWN = 10000, 0.35, 7.5, 0.6
+local CHILL_SCALE, GARAGE_SCALE, RETRO_SCALE = 0.5, 0.65, 0.70
+local CHILL_CENTER  = Vector3.new(0, 8000,  0)
+local GARAGE_CENTER = Vector3.new(0, 32000, 0)
+local RETRO_CENTER  = Vector3.new(0, 56000, 0)
+
+local PORTAL_COLOR      = Color3.fromRGB(255, 215, 0)
+local PORTAL_EMIT_COLOR = Color3.fromRGB(255, 190, 40)
+local SPAWN_SOUND = "rbxassetid://756847338"
+local EXIT_PORTAL_HEIGHT = 5
+
+local currentDestination = "普通"
+local spawnedChild, spawnedGarage, spawnedRetro
+local nextPortal, returnPosition = 1, nil
+local tool, handle, muzzle, portal1, portal2
+local gunBodyFolder, gunWelds, muzzleWeld
+local lastTeleport, arrivedAt, isTeleporting = 0, nil, false
+local screenGui, menuFrame, configFrame, codeBox
+local configRows = {}
+
+local sSnd = Instance.new("Sound", workspace); sSnd.SoundId = SPAWN_SOUND; sSnd.Volume = 1.5
+local tSnd = Instance.new("Sound", workspace); tSnd.SoundId = SPAWN_SOUND; tSnd.Volume = 1.5
+
+local function notify(title, text)
+	pcall(function() StarterGui:SetCore("SendNotification", {Title=title, Text=text, Duration=3}) end)
+end
+
+local function gunCFrame()
+	return CFrame.new(gunConfig.posX, gunConfig.posY, gunConfig.posZ)
+		* CFrame.Angles(math.rad(gunConfig.rotX), math.rad(gunConfig.rotY), math.rad(gunConfig.rotZ))
+end
+
+local function applyGunConfig()
+	if not gunWelds then return end
+	local s = gunConfig.scale
+	for _, entry in ipairs(gunWelds) do
+		if entry.weld and entry.weld.Parent then
+			local baseCF = entry.baseCF
+			local scaledCF = CFrame.new(baseCF.Position * s) * (baseCF - baseCF.Position)
+			entry.weld.C0 = gunCFrame() * scaledCF
+			if entry.part and entry.part.Parent and entry.baseSize then
+				entry.part.Size = entry.baseSize * s
+			end
+		end
+	end
+	if muzzleWeld and muzzleWeld.Parent then
+		local mo = GUN_STYLE.muzzleOffset or CFrame.new(0, 0, -1)
+		local scaledMO = CFrame.new(mo.Position * s) * (mo - mo.Position)
+		muzzleWeld.C0 = gunCFrame() * scaledMO
+	end
+end
+
+local function updateCodeBox()
+	if not codeBox then return end
+	codeBox.Text = string.format(
+		"枪械位置 = Vector3.new(%.2f, %.2f, %.2f)\n枪械旋转 = CFrame.Angles(math.rad(%.0f), math.rad(%.0f), math.rad(%.0f))\n枪械缩放 = %.2f",
+		gunConfig.posX, gunConfig.posY, gunConfig.posZ,
+		gunConfig.rotX, gunConfig.rotY, gunConfig.rotZ, gunConfig.scale)
+end
+
+local function refreshAllConfigRows()
+	for _, entry in ipairs(configRows) do
+		if entry.valLbl and entry.valLbl.Parent then
+			entry.valLbl.Text = string.format("%.2f", gunConfig[entry.key])
+		end
+	end
+end
+
+local function saveReturnPosition()
+	if not returnPosition and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
+		returnPosition = p.Character.HumanoidRootPart.Position
+	end
+end
+
+local function positionModel(model, targetPos)
+	local ok = pcall(function() model:PivotTo(CFrame.new(targetPos)) end)
+	if not ok then
+		local cf = model:GetBoundingBox()
+		local offset = targetPos - cf.Position
+		for _, part in ipairs(model:GetDescendants()) do
+			if part:IsA("BasePart") then part.CFrame = part.CFrame + offset end
+		end
+	end
+end
+
+local function ignoreList()
+	local list = {}
+	if p.Character then table.insert(list, p.Character) end
+	if tool then table.insert(list, tool) end
+	if portal1 and portal1.part then table.insert(list, portal1.part) end
+	if portal2 and portal2.part then table.insert(list, portal2.part) end
+	return list
+end
+
+local function findGround(pos, fromY)
+	if fromY == nil then fromY = 400 end
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	params.FilterDescendantsInstances = ignoreList()
+	local origin = pos + Vector3.new(0, fromY, 0)
+	local ray = workspace:Raycast(origin, Vector3.new(0, -2000, 0), params)
+	return ray and ray.Position or pos
+end
+local function rebuildGunBody()
+	if not handle or not handle.Parent then return end
+	if gunBodyFolder then gunBodyFolder:Destroy() end
+	if muzzle and muzzle.Parent then muzzle:Destroy() end
+	gunWelds = {}
+	local parentTool = tool
+	gunBodyFolder = Instance.new("Folder")
+	gunBodyFolder.Name = "枪身"
+	gunBodyFolder.Parent = parentTool
+	local style = GUN_STYLE
+
+	if style.type == "model" then
+		local loaded, objects = pcall(function() return game:GetObjects(style.assetId) end)
+		if loaded and objects and objects[1] then
+			local source = objects[1]
+			if not source:IsA("Model") then
+				local wrapper = Instance.new("Model"); source.Parent = wrapper; source = wrapper
+			end
+			local sourcePivot = source:GetPivot()
+			for _, obj in ipairs(source:GetDescendants()) do
+				if obj:IsA("Script") or obj:IsA("LocalScript") or obj:IsA("ModuleScript") then obj:Destroy() end
+			end
+			for _, part in ipairs(source:GetDescendants()) do
+				if part:IsA("BasePart") then
+					local relative = sourcePivot:ToObjectSpace(part.CFrame)
+					local baseSize = part.Size
+					part.Anchored = false; part.CanCollide = false
+					part.CanTouch = false; part.CanQuery = false; part.Massless = true
+					part.Parent = gunBodyFolder
+					local weld = Instance.new("Weld")
+					weld.Name = "枪械部件焊接"
+					weld.Part0 = handle; weld.Part1 = part
+					weld.C0 = gunCFrame() * relative
+					weld.C1 = CFrame.new()
+					weld.Parent = handle
+					table.insert(gunWelds, { weld = weld, baseCF = relative, part = part, baseSize = baseSize })
+				end
+			end
+			source:Destroy()
+		end
+	end
+
+	if #gunWelds == 0 then
+		local fallback = Instance.new("Part")
+		fallback.Name = "备用枪身"
+		fallback.Size = Vector3.new(0.4, 0.4, 1.6)
+		fallback.Color = PORTAL_COLOR
+		fallback.Material = Enum.Material.Neon
+		fallback.Anchored = false; fallback.CanCollide = false
+		fallback.CanTouch = false; fallback.CanQuery = false; fallback.Massless = true
+		fallback.Parent = gunBodyFolder
+		local weld = Instance.new("Weld")
+		weld.Name = "枪身焊接"
+		weld.Part0 = handle; weld.Part1 = fallback
+		weld.C0 = gunCFrame() * CFrame.new(0, 0, -0.8)
+		weld.C1 = CFrame.new()
+		weld.Parent = handle
+		table.insert(gunWelds, { weld = weld, baseCF = CFrame.new(0, 0, -0.8), part = fallback, baseSize = fallback.Size })
+	end
+
+	muzzle = Instance.new("Part")
+	muzzle.Name = "枪口"
+	muzzle.Size = Vector3.new(0.2, 0.2, 0.2)
+	muzzle.Transparency = 1
+	muzzle.CanCollide = false
+	muzzle.Massless = true
+	muzzle.Parent = parentTool
+
+	muzzleWeld = Instance.new("Weld")
+	muzzleWeld.Part0 = handle
+	muzzleWeld.Part1 = muzzle
+	muzzleWeld.C0 = gunCFrame() * (style.muzzleOffset or CFrame.new(0, 0, -1))
+	muzzleWeld.C1 = CFrame.new()
+	muzzleWeld.Parent = handle
+end
+local function buildEvilMortyGun()
+	local t = Instance.new("Tool")
+	t.Name = GUN_NAME
+	t.RequiresHandle = true
+	t.CanBeDropped = false
+	local h = Instance.new("Part")
+	h.Name = "手柄"
+	h.Size = Vector3.new(0.2, 0.2, 0.2)
+	h.Transparency = 1
+	h.CanCollide = false; h.CanTouch = false; h.CanQuery = false; h.Massless = true
+	h.Parent = t
+	local snd = Instance.new("Sound")
+	snd.Name = "射击音效"; snd.SoundId = SPAWN_SOUND; snd.Volume = 1.2
+	snd.Parent = h
+	t.PrimaryPart = h
+	return t, h
+end
+
+local function createBeam(startPos, endPos, color)
+	local distance = (endPos - startPos).Magnitude
+	if distance < 0.1 then return end
+	local beam = Instance.new("Part")
+	beam.Anchored = true; beam.CanCollide = false
+	beam.CanTouch = false; beam.CanQuery = false
+	beam.Size = Vector3.new(0.2, 0.2, distance)
+	beam.Color = color or PORTAL_COLOR
+	beam.Material = Enum.Material.Neon
+	beam.CFrame = CFrame.lookAt(startPos, endPos) * CFrame.new(0, 0, -distance/2)
+	beam.Parent = workspace
+	local tw = TweenService:Create(beam, TweenInfo.new(0.15), {Size = Vector3.new(0,0,distance), Transparency = 1})
+	tw:Play(); tw.Completed:Connect(function() beam:Destroy() end)
+end
+
+local function destroyPortalPart(portalObj)
+	if not portalObj or not portalObj.part or not portalObj.part.Parent then return end
+	local portal = portalObj.part
+	portalObj.part = nil
+	local surface = portal:FindFirstChild("传送门表面")
+	if surface then
+		local t = TweenService:Create(surface, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.In),
+			{Size = Vector3.new(0.05, 0.05, 0.04)})
+		t:Play(); t.Completed:Connect(function() if portal.Parent then portal:Destroy() end end)
+	else
+		portal:Destroy()
+	end
+end
+
+local function createRickPortal(pos, norm, isReturnPortal)
+	sSnd:Play()
+	local center = pos + norm * PORTAL_GAP
+	local up = Vector3.new(0, 1, 0)
+	if math.abs(norm.Y) > 0.99 then up = Vector3.new(0, 0, 1) end
+
+	local base = Instance.new("Part")
+	base.Name = "金色传送门"; base.Size = Vector3.new(0.6, 0.6, 0.6)
+	base.Transparency = 1; base.Anchored = true; base.CanCollide = false
+	base.CanTouch = false; base.CanQuery = false; base.CastShadow = false
+	base.CFrame = CFrame.lookAt(center, center + norm, up)
+	base.Parent = workspace
+
+	local surface = Instance.new("Part")
+	surface.Name = "传送门表面"; surface.Transparency = 1; surface.Anchored = true
+	surface.CanCollide = false; surface.CanTouch = false; surface.CanQuery = false
+	surface.CastShadow = false; surface.Size = Vector3.new(0.15, 0.15, 0.04)
+	surface.CFrame = base.CFrame; surface.Parent = base
+
+
+	for _, face in ipairs({Enum.NormalId.Front, Enum.NormalId.Back}) do
+		local sGui = Instance.new("SurfaceGui")
+		sGui.Name = face == Enum.NormalId.Front and "传送门界面正面" or "传送门界面背面"
+		sGui.Face = face
+		sGui.AlwaysOnTop = false
+		sGui.LightInfluence = 0
+		sGui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
+		sGui.PixelsPerStud = 100
+		sGui.Parent = surface
+
+		local img = Instance.new("ImageLabel")
+		img.Name = "传送门图像"
+		img.Size = UDim2.fromScale(1, 1)
+		img.BackgroundTransparency = 1
+		img.Image = EM_PORTAL_TEXTURE
+		img.ImageColor3 = PORTAL_COLOR
+		img.ImageTransparency = 0
+		img.ScaleType = Enum.ScaleType.Stretch
+		img.Parent = sGui
+	end
+
+	local att = Instance.new("Attachment", surface)
+	local particles = Instance.new("ParticleEmitter")
+	particles.Texture = "rbxasset://textures/particles/sparkles_main.dds"
+	particles.Color = ColorSequence.new(PORTAL_EMIT_COLOR)
+	particles.LightEmission = 1; particles.Rate = 0
+	particles.Lifetime = NumberRange.new(0.4, 0.8)
+	particles.Speed = NumberRange.new(0.4, 1.0)
+	particles.SpreadAngle = Vector2.new(360, 360)
+	particles.Size = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 0.14),
+		NumberSequenceKeypoint.new(0.5, 0.09),
+		NumberSequenceKeypoint.new(1, 0)})
+	particles.Transparency = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 0),
+		NumberSequenceKeypoint.new(0.7, 0.2),
+		NumberSequenceKeypoint.new(1, 1)})
+	particles.Parent = att
+
+	TweenService:Create(surface, TweenInfo.new(0.35, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
+		{Size = Vector3.new(PORTAL_SIZE, PORTAL_SIZE, 0.06)}):Play()
+	particles:Emit(30); particles.Rate = 10
+
+	local rotation = 0
+	local spin
+	spin = RunService.RenderStepped:Connect(function(dt)
+		if not base.Parent then spin:Disconnect(); return end
+		rotation = rotation + dt * 0.65
+		surface.CFrame = base.CFrame * CFrame.Angles(0, 0, rotation)
+	end)
+
+
+	local portalObj = {
+		type = "Rick", part = base, position = center, normal = norm,
+		isReturnPortal = isReturnPortal or false,
+	}
+	task.spawn(function()
+		task.wait(15)
+		if portal1 == portalObj then destroyPortalPart(portal1); portal1 = nil; arrivedAt = nil
+		elseif portal2 == portalObj then destroyPortalPart(portal2); portal2 = nil; arrivedAt = nil end
+	end)
+	return portalObj
+end
+
+local function createPortalPart(pos, norm, isReturnPortal)
+	return createRickPortal(pos, norm, isReturnPortal)
+end
+
+local function cleanupPortals()
+	if portal1 then destroyPortalPart(portal1) end
+	if portal2 then destroyPortalPart(portal2) end
+	portal1, portal2 = nil, nil
+	arrivedAt = nil; isTeleporting = false; nextPortal = 1
+end
+
+local function removeGunFromPlayer(name)
+	local backpack = p:FindFirstChild("Backpack")
+	if backpack then
+		for _, v in ipairs(backpack:GetChildren()) do
+			if v:IsA("Tool") and v.Name == name then v:Destroy() end
+		end
+	end
+	if p.Character then
+		for _, v in ipairs(p.Character:GetChildren()) do
+			if v:IsA("Tool") and v.Name == name then v:Destroy() end
+		end
+	end
+end
+
+local function loadMap(assetId, name, center, scale)
+	local ok, objs = pcall(function() return game:GetObjects(assetId) end)
+	if not ok or not objs or not objs[1] then return nil end
+	local model = objs[1]
+	if not model:IsA("Model") then
+		local w = Instance.new("Model"); model.Parent = w; model = w
+	end
+	model.Name = name; model.Parent = workspace
+	positionModel(model, center)
+	pcall(function() model:ScaleTo(scale) end)
+	for _, part in ipairs(model:GetDescendants()) do
+		if part:IsA("BasePart") then part.Anchored = true; part.CanCollide = true end
+	end
+	return model
+end
+
+local function ensureChillExists()
+	if not (spawnedChild and spawnedChild.Parent) then
+		spawnedChild = loadMap(CHILL_ASSET_ID, "休闲地图", CHILL_CENTER, CHILL_SCALE)
+	end
+end
+local function ensureGarageExists()
+	if not (spawnedGarage and spawnedGarage.Parent) then
+		spawnedGarage = loadMap(GARAGE_ASSET_ID, "瑞克车库地图", GARAGE_CENTER, GARAGE_SCALE)
+	end
+end
+local function ensureRetroExists()
+	if not (spawnedRetro and spawnedRetro.Parent) then
+		spawnedRetro = loadMap(RETRO_ASSET_ID, "复古地图", RETRO_CENTER, RETRO_SCALE)
+	end
+end
+
+local function setModeNormal()
+		currentDestination = "普通"; nextPortal = 1
+	notify("模式：普通", "射击 — 2 个传送门 [Z]")
+end
+local function setModeChill()
+	saveReturnPosition(); currentDestination = "休闲"; ensureChillExists()
+	notify("模式：休闲地图", "朝墙/地面射击 — 出口在休闲地图 [X]")
+end
+local function setModeGarage()
+	saveReturnPosition(); currentDestination = "车库"; ensureGarageExists()
+	notify("模式：瑞克车库", "朝墙/地面射击 — 出口在车库 [C]")
+end
+local function setModeRetro()
+	saveReturnPosition(); currentDestination = "复古"; ensureRetroExists()
+	notify("模式：复古地图", "朝墙/地面射击 — 出口在复古地图 [E]")
+end
+local function setModeReturn()
+	if not returnPosition then
+		notify("提示", "你还没离开过地球！"); return
+	end
+	currentDestination = "返回"
+	notify("模式：返回", "射击 — 会打开返回地球的传送门 [V]")
+end
+
+-- =====================================================
+--  主题 + addCorner
+-- =====================================================
+local T = {
+	bg      = Color3.fromRGB(0, 0, 0),
+	panel   = Color3.fromRGB(14, 14, 14),
+	field   = Color3.fromRGB(6, 6, 6),
+	text    = Color3.fromRGB(235, 235, 235),
+	textDim = Color3.fromRGB(115, 115, 115),
+	accent  = Color3.fromRGB(255, 255, 255),
+	termBg  = Color3.fromRGB(0, 0, 0),
+	termFg  = Color3.fromRGB(200, 200, 200),
+}
+
+local function addCorner(parent, r)
+	local c = Instance.new("UICorner")
+	c.CornerRadius = UDim.new(0, r or 8)
+	c.Parent = parent
+	return c
+end
+
+-- =====================================================
+--  菜单
+-- =====================================================
+local function createMenu()
+	local playerGui = p:WaitForChild("PlayerGui")
+	local oldGui = playerGui:FindFirstChild("传送门菜单界面")
+	if oldGui then oldGui:Destroy() end
+
+	screenGui = Instance.new("ScreenGui")
+	screenGui.Name = "传送门菜单界面"
+	screenGui.ResetOnSpawn = false
+	screenGui.IgnoreGuiInset = true
+	screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+	screenGui.Parent = playerGui
+
+	local toggleIcon = Instance.new("TextButton")
+	toggleIcon.Name = "开关按钮"
+	toggleIcon.Size = UDim2.new(0, 48, 0, 48)
+	toggleIcon.Position = UDim2.new(0, 20, 0.5, -24)
+	toggleIcon.BackgroundColor3 = T.bg
+	toggleIcon.BorderSizePixel = 0
+	toggleIcon.TextColor3 = T.accent
+	toggleIcon.TextSize = 22
+	toggleIcon.Font = Enum.Font.GothamBlack
+	toggleIcon.Text = "🌠"
+	toggleIcon.AutoButtonColor = true
+	toggleIcon.Active = true
+	toggleIcon.Draggable = true
+	toggleIcon.ZIndex = 10
+	toggleIcon.Parent = screenGui
+	addCorner(toggleIcon, 12)
+
+	dashIndicatorLabel = Instance.new("TextLabel")
+	dashIndicatorLabel.Size = UDim2.new(0, 150, 0, 24)
+	dashIndicatorLabel.Position = UDim2.new(0, 20, 0.5, 30)
+	dashIndicatorLabel.BackgroundColor3 = T.bg
+	dashIndicatorLabel.BorderSizePixel = 0
+	dashIndicatorLabel.TextColor3 = DASH_OUTLINE
+	dashIndicatorLabel.TextSize = 12
+	dashIndicatorLabel.Font = Enum.Font.GothamBold
+	dashIndicatorLabel.Text = "冲刺：普通 [B]"
+	dashIndicatorLabel.ZIndex = 10
+	dashIndicatorLabel.Parent = screenGui
+	addCorner(dashIndicatorLabel, 6)
+
+
+	menuFrame = Instance.new("Frame")
+	menuFrame.Size = UDim2.new(0, 280, 0, 480)
+	menuFrame.Position = UDim2.new(0.5, -140, 0.5, -240)
+	menuFrame.BackgroundColor3 = T.bg
+	menuFrame.BorderSizePixel = 0
+	menuFrame.Active = true
+	menuFrame.Draggable = true
+	menuFrame.Visible = false
+	menuFrame.ZIndex = 5
+	menuFrame.Parent = screenGui
+	addCorner(menuFrame, 10)
+
+	local header = Instance.new("Frame")
+	header.Size = UDim2.new(1, 0, 0, 36)
+	header.BackgroundColor3 = T.panel
+	header.BorderSizePixel = 0
+	header.ZIndex = 6
+	header.Parent = menuFrame
+	local hc = Instance.new("UICorner"); hc.CornerRadius = UDim.new(0, 10); hc.Parent = header
+	local hFix = Instance.new("Frame")
+	hFix.Size = UDim2.new(1, 0, 0, 10)
+	hFix.Position = UDim2.new(0, 0, 1, -10)
+	hFix.BackgroundColor3 = T.panel
+	hFix.BorderSizePixel = 0
+	hFix.ZIndex = 6
+	hFix.Parent = header
+
+	local hTitle = Instance.new("TextLabel")
+	hTitle.Size = UDim2.new(1, -50, 1, 0)
+	hTitle.Position = UDim2.new(0, 14, 0, 0)
+	hTitle.BackgroundTransparency = 1
+	hTitle.Text = "传送门枪"
+	hTitle.TextColor3 = T.text
+	hTitle.TextSize = 12
+	hTitle.Font = Enum.Font.GothamBold
+	hTitle.TextXAlignment = Enum.TextXAlignment.Left
+	hTitle.ZIndex = 8
+	hTitle.Parent = header
+
+	local closeBtn = Instance.new("TextButton")
+	closeBtn.Size = UDim2.new(0, 24, 0, 24)
+	closeBtn.Position = UDim2.new(1, -32, 0.5, -12)
+	closeBtn.BackgroundColor3 = T.bg
+	closeBtn.BorderSizePixel = 0
+	closeBtn.Text = "×"
+	closeBtn.TextColor3 = T.text
+	closeBtn.TextSize = 15
+	closeBtn.Font = Enum.Font.GothamBold
+	closeBtn.ZIndex = 9
+	closeBtn.Parent = header
+	addCorner(closeBtn, 6)
+	closeBtn.MouseButton1Click:Connect(function() menuFrame.Visible = false end)
+
+	local content = Instance.new("Frame")
+	content.Size = UDim2.new(1, -14, 1, -50)
+	content.Position = UDim2.new(0, 7, 0, 44)
+	content.BackgroundTransparency = 1
+	content.ZIndex = 7
+	content.Parent = menuFrame
+
+	local list = Instance.new("UIListLayout")
+	list.Padding = UDim.new(0, 5)
+	list.SortOrder = Enum.SortOrder.LayoutOrder
+	list.Parent = content
+
+
+	local function makeBtn(text, order, cb)
+		local btn = Instance.new("TextButton")
+		btn.Size = UDim2.new(1, 0, 0, 34)
+		btn.BackgroundColor3 = T.panel
+		btn.BorderSizePixel = 0
+		btn.Text = text
+		btn.TextColor3 = T.text
+		btn.TextSize = 12
+		btn.Font = Enum.Font.GothamMedium
+		btn.LayoutOrder = order
+		btn.ZIndex = 8
+		btn.Parent = content
+		addCorner(btn, 6)
+		btn.MouseButton1Click:Connect(cb)
+	end
+
+	local function makeSection(text, order)
+		local s = Instance.new("TextLabel")
+		s.Size = UDim2.new(1, 0, 0, 16)
+		s.BackgroundTransparency = 1
+		s.Text = text
+		s.TextColor3 = T.textDim
+		s.TextSize = 10
+		s.Font = Enum.Font.GothamBold
+		s.TextXAlignment = Enum.TextXAlignment.Left
+		s.LayoutOrder = order
+		s.ZIndex = 8
+		s.Parent = content
+	end
+
+	makeSection("传送门", 1)
+	makeBtn("普通 · 2 个传送门   [Z]", 2, setModeNormal)
+	makeBtn("休闲地图   [X]", 3, setModeChill)
+	makeBtn("瑞克车库   [C]", 4, setModeGarage)
+	makeBtn("复古地图   [E]", 5, setModeRetro)
+	makeBtn("返回地球   [V]", 6, setModeReturn)
+
+	makeSection("冲刺", 7)
+	makeBtn("💨 触发冲刺", 8, doDash)
+	makeBtn("普通冲刺", 9, function() setDashMode("normal") end)
+	makeBtn("默认冲刺", 10, function() setDashMode("default") end)
+
+	makeSection("其他", 11)
+	makeBtn("🔍 扫描器 开/关", 12, toggleScanner)
+	makeBtn("枪械设置   [N]", 13,
+		function() if configFrame then configFrame.Visible = not configFrame.Visible end end)
+	makeBtn("关闭   [G]", 14, function() menuFrame.Visible = false end)
+
+	toggleIcon.MouseButton1Click:Connect(function()
+		menuFrame.Visible = not menuFrame.Visible
+	end)
+
+
+	updateDashIndicator()
+end
+
+-- =====================================================
+--  枪械配置面板
+-- =====================================================
+local function createConfigPanel()
+	local playerGui = p:WaitForChild("PlayerGui")
+	local old = playerGui:FindFirstChild("枪械设置界面")
+	if old then old:Destroy() end
+
+	local gui = Instance.new("ScreenGui")
+	gui.Name = "枪械设置界面"
+	gui.ResetOnSpawn = false
+	gui.IgnoreGuiInset = true
+	gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+	gui.Parent = playerGui
+
+	configFrame = Instance.new("Frame")
+	configFrame.Size = UDim2.new(0, 300, 0, 500)
+	configFrame.Position = UDim2.new(0.5, 140, 0.5, -250)
+	configFrame.BackgroundColor3 = T.bg
+	configFrame.BorderSizePixel = 0
+	configFrame.Active = true
+	configFrame.Draggable = true
+	configFrame.Visible = false
+	configFrame.ZIndex = 5
+	configFrame.Parent = gui
+	addCorner(configFrame, 10)
+
+	local header = Instance.new("Frame")
+	header.Size = UDim2.new(1, 0, 0, 36)
+	header.BackgroundColor3 = T.panel
+	header.BorderSizePixel = 0
+	header.ZIndex = 6
+	header.Parent = configFrame
+	local hc = Instance.new("UICorner"); hc.CornerRadius = UDim.new(0, 10); hc.Parent = header
+	local hFix = Instance.new("Frame")
+	hFix.Size = UDim2.new(1, 0, 0, 10)
+	hFix.Position = UDim2.new(0, 0, 1, -10)
+	hFix.BackgroundColor3 = T.panel
+	hFix.BorderSizePixel = 0
+	hFix.ZIndex = 6
+	hFix.Parent = header
+
+	local hTitle = Instance.new("TextLabel")
+	hTitle.Size = UDim2.new(1, -50, 1, 0)
+	hTitle.Position = UDim2.new(0, 14, 0, 0)
+	hTitle.BackgroundTransparency = 1
+	hTitle.Text = "枪械设置"
+	hTitle.TextColor3 = T.text
+	hTitle.TextSize = 12
+	hTitle.Font = Enum.Font.GothamBold
+	hTitle.TextXAlignment = Enum.TextXAlignment.Left
+	hTitle.ZIndex = 8
+	hTitle.Parent = header
+
+	local closeBtn = Instance.new("TextButton")
+	closeBtn.Size = UDim2.new(0, 24, 0, 24)
+	closeBtn.Position = UDim2.new(1, -32, 0.5, -12)
+	closeBtn.BackgroundColor3 = T.bg
+	closeBtn.BorderSizePixel = 0
+	closeBtn.Text = "×"
+	closeBtn.TextColor3 = T.text
+	closeBtn.TextSize = 15
+	closeBtn.Font = Enum.Font.GothamBold
+	closeBtn.ZIndex = 9
+	closeBtn.Parent = header
+	addCorner(closeBtn, 6)
+	closeBtn.MouseButton1Click:Connect(function() configFrame.Visible = false end)
+
+	local body = Instance.new("Frame")
+	body.Size = UDim2.new(1, -14, 1, -50)
+	body.Position = UDim2.new(0, 7, 0, 44)
+	body.BackgroundTransparency = 1
+	body.ZIndex = 7
+	body.Parent = configFrame
+
+	configRows = {}
+
+
+	local function makeRow(yPos, labelText, key, step, minV, maxV)
+		local lbl = Instance.new("TextLabel")
+		lbl.Size = UDim2.new(0, 76, 0, 26)
+		lbl.Position = UDim2.new(0, 4, 0, yPos)
+		lbl.BackgroundTransparency = 1
+		lbl.Text = labelText
+		lbl.TextColor3 = T.text
+		lbl.TextSize = 11
+		lbl.Font = Enum.Font.GothamMedium
+		lbl.TextXAlignment = Enum.TextXAlignment.Left
+		lbl.ZIndex = 8
+		lbl.Parent = body
+
+		local minus = Instance.new("TextButton")
+		minus.Size = UDim2.new(0, 28, 0, 24)
+		minus.Position = UDim2.new(0, 82, 0, yPos + 1)
+		minus.BackgroundColor3 = T.panel
+		minus.BorderSizePixel = 0
+		minus.TextColor3 = T.text
+		minus.TextSize = 15
+		minus.Font = Enum.Font.GothamBold
+		minus.Text = "−"
+		minus.ZIndex = 8
+		minus.Parent = body
+		addCorner(minus, 5)
+
+		local valLbl = Instance.new("TextLabel")
+		valLbl.Size = UDim2.new(0, 108, 0, 24)
+		valLbl.Position = UDim2.new(0, 114, 0, yPos + 1)
+		valLbl.BackgroundColor3 = T.field
+		valLbl.BorderSizePixel = 0
+		valLbl.TextColor3 = T.accent
+		valLbl.TextSize = 11
+		valLbl.Font = Enum.Font.Code
+		valLbl.Text = string.format("%.2f", gunConfig[key])
+		valLbl.ZIndex = 8
+		valLbl.Parent = body
+		addCorner(valLbl, 5)
+
+		local plus = Instance.new("TextButton")
+		plus.Size = UDim2.new(0, 28, 0, 24)
+		plus.Position = UDim2.new(0, 226, 0, yPos + 1)
+		plus.BackgroundColor3 = T.panel
+		plus.BorderSizePixel = 0
+		plus.TextColor3 = T.text
+		plus.TextSize = 15
+		plus.Font = Enum.Font.GothamBold
+		plus.Text = "+"
+		plus.ZIndex = 8
+		plus.Parent = body
+		addCorner(plus, 5)
+
+		local function refresh()
+			valLbl.Text = string.format("%.2f", gunConfig[key])
+			applyGunConfig()
+			updateCodeBox()
+		end
+
+		minus.MouseButton1Click:Connect(function()
+			gunConfig[key] = math.max(minV, gunConfig[key] - step); refresh()
+		end)
+		plus.MouseButton1Click:Connect(function()
+			gunConfig[key] = math.min(maxV, gunConfig[key] + step); refresh()
+		end)
+
+		table.insert(configRows, { key = key, valLbl = valLbl })
+	end
+
+	local function sectionLabel(yPos, text)
+		local l = Instance.new("TextLabel")
+		l.Size = UDim2.new(1, 0, 0, 14)
+		l.Position = UDim2.new(0, 4, 0, yPos)
+		l.BackgroundTransparency = 1
+		l.Text = text
+		l.TextColor3 = T.textDim
+		l.TextSize = 10
+		l.Font = Enum.Font.GothamBold
+		l.TextXAlignment = Enum.TextXAlignment.Left
+		l.ZIndex = 8
+		l.Parent = body
+	end
+
+	sectionLabel(4, "位置")
+	makeRow(20,  "位置 X", "posX", 0.05, -5, 5)
+	makeRow(48,  "位置 Y", "posY", 0.05, -5, 5)
+	makeRow(76,  "位置 Z", "posZ", 0.05, -5, 5)
+
+	sectionLabel(108, "缩放")
+	makeRow(124, "缩放", "scale", 0.05, 0.1, 5)
+
+	sectionLabel(156, "旋转")
+	makeRow(172, "旋转 X", "rotX", 5, -180, 180)
+	makeRow(200, "旋转 Y", "rotY", 5, -180, 180)
+	makeRow(228, "旋转 Z", "rotZ", 5, -180, 180)
+
+	codeBox = Instance.new("TextBox")
+	codeBox.Size = UDim2.new(1, -8, 0, 66)
+	codeBox.Position = UDim2.new(0, 4, 0, 276)
+	codeBox.BackgroundColor3 = T.termBg
+	codeBox.BorderSizePixel = 0
+	codeBox.TextColor3 = T.termFg
+	codeBox.TextSize = 11
+	codeBox.Font = Enum.Font.Code
+	codeBox.TextEditable = false
+	codeBox.MultiLine = true
+	codeBox.TextXAlignment = Enum.TextXAlignment.Left
+	codeBox.TextYAlignment = Enum.TextYAlignment.Top
+	codeBox.TextWrapped = true
+	codeBox.ZIndex = 8
+	codeBox.Parent = body
+	addCorner(codeBox, 6)
+
+	updateCodeBox()
+end
+
+-- =====================================================
+--  传送
+-- =====================================================
+local function getPortalCF(portalObj)
+	if not portalObj or not portalObj.part or not portalObj.part.Parent then return nil end
+	if portalObj.part:IsA("Model") then return portalObj.part:GetPivot() end
+	return portalObj.part.CFrame
+end
+
+local function pointInside(portalObj, point)
+	local cf = getPortalCF(portalObj)
+	if not cf then return false end
+	local rel = cf:PointToObjectSpace(point)
+	if rel.Z > 2.2 or rel.Z < -1.8 then return false end
+	return (rel.X*rel.X + rel.Y*rel.Y) <= 12.25
+end
+
+local function insidePortal(portal, root)
+	if not portal or not portal.part or not portal.part.Parent then return false end
+	local base = root.Position
+	return pointInside(portal, base)
+		or pointInside(portal, base - Vector3.new(0, 2.0, 0))
+		or pointInside(portal, base + Vector3.new(0, 1.2, 0))
+end
+
+local function teleport(fromPortal, toPortal)
+	local char = p.Character
+	if not char or not toPortal or not toPortal.part or not toPortal.part.Parent then return end
+	local hrp = char:FindFirstChild("HumanoidRootPart")
+	local hum = char:FindFirstChildOfClass("Humanoid")
+	if not hrp or not hum or hum.Health <= 0 then return end
+	local now = os.clock()
+	if now - lastTeleport < COOLDOWN or arrivedAt == fromPortal or isTeleporting then return end
+	isTeleporting = true; lastTeleport = now
+	if hum.SeatPart then hum.Sit = false end
+	tSnd:Play()
+
+	local enterPos, enterNorm = fromPortal.position, fromPortal.normal
+	local exitPos, exitNorm = toPortal.position, toPortal.normal
+
+	hrp.AssemblyLinearVelocity = Vector3.zero
+	hrp.AssemblyAngularVelocity = Vector3.zero
+	hrp.Anchored = true
+
+	local enterLook = Vector3.new(-enterNorm.X, 0, -enterNorm.Z)
+	enterLook = enterLook.Magnitude < 0.01 and hrp.CFrame.LookVector or enterLook.Unit
+	local pullCF = CFrame.lookAt(enterPos - enterNorm*0.8, enterPos - enterNorm*0.8 + enterLook)
+	local pullT = TweenService:Create(hrp, TweenInfo.new(0.1, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {CFrame = pullCF})
+	pullT:Play(); pullT.Completed:Wait()
+
+	local launchVelocity, exitCF
+	local flatLook = Vector3.new(hrp.CFrame.LookVector.X, 0, hrp.CFrame.LookVector.Z)
+	if flatLook.Magnitude < 0.01 then flatLook = Vector3.new(0, 0, -1) else flatLook = flatLook.Unit end
+
+	if exitNorm.Y > 0.7 then
+		exitCF = CFrame.lookAt(exitPos + Vector3.new(0, 3.2, 0), exitPos + Vector3.new(0, 3.2, 0) + flatLook)
+		launchVelocity = Vector3.new(0, 35, 0)
+		hum:ChangeState(Enum.HumanoidStateType.Jumping)
+	elseif exitNorm.Y < -0.7 then
+		exitCF = CFrame.lookAt(exitPos - Vector3.new(0, 3.5, 0), exitPos - Vector3.new(0, 3.5, 0) + flatLook)
+		launchVelocity = (flatLook * 15) + Vector3.new(0, -20, 0)
+		hum:ChangeState(Enum.HumanoidStateType.Freefall)
+	else
+		local wallDir = Vector3.new(exitNorm.X, 0, exitNorm.Z)
+		wallDir = wallDir.Magnitude < 0.01 and hrp.CFrame.LookVector or wallDir.Unit
+		exitCF = CFrame.lookAt(exitPos + exitNorm * 3.0, exitPos + exitNorm * 3.0 + wallDir)
+		launchVelocity = wallDir * 30
+		hum:ChangeState(Enum.HumanoidStateType.Freefall)
+	end
+
+	hrp.CFrame = exitCF; hrp.Anchored = false
+	hrp.AssemblyLinearVelocity = launchVelocity
+	arrivedAt = toPortal; isTeleporting = false
+
+	if toPortal.isReturnPortal then
+		returnPosition = nil
+		currentDestination = "普通"
+		notify("返回", "你已返回地球！")
+	end
+
+	task.spawn(function()
+		task.wait(0.4)
+		while arrivedAt == toPortal do
+			local c = p.Character
+			local root = c and c:FindFirstChild("HumanoidRootPart")
+			if not root or not toPortal.part or not toPortal.part.Parent or not insidePortal(toPortal, root) then
+				arrivedAt = nil; break
+			end
+			task.wait(0.05)
+		end
+	end)
+end
+
+RunService.Heartbeat:Connect(function()
+	local char = p.Character
+	local root = char and char:FindFirstChild("HumanoidRootPart")
+	if not root then return end
+	local pos = root.Position
+	local checks = {
+		{spawnedChild,  CHILL_CENTER,  "休闲地图"},
+		{spawnedGarage, GARAGE_CENTER, "车库"},
+		{spawnedRetro,  RETRO_CENTER,  "复古地图"},
+	}
+	for _, c in ipairs(checks) do
+		local map, center, name = c[1], c[2], c[3]
+		if map and map.Parent and pos.Y < center.Y - 800 and pos.Y > center.Y - 4000 then
+			root.CFrame = CFrame.new(center + Vector3.new(0, 20, 0))
+			notify("保护机制", "你已被拉回 " .. name .. "！")
+			return
+		end
+	end
+end)
+
+RunService.Heartbeat:Connect(function()
+	if not portal1 or not portal2 or isTeleporting then return end
+	local char = p.Character
+	local root = char and char:FindFirstChild("HumanoidRootPart")
+	if not root then return end
+	if insidePortal(portal1, root) then teleport(portal1, portal2)
+	elseif insidePortal(portal2, root) then teleport(portal2, portal1) end
+end)
+
+local function createExitPortalInDimension(groundPos, hitNormal)
+	local isFloorShot = math.abs(hitNormal.Y) > 0.7
+	local exitPos, exitNorm
+	if isFloorShot then
+		exitPos = groundPos + Vector3.new(0, 0.05, 0)
+		exitNorm = Vector3.new(0, 1, 0)
+	else
+		exitPos = groundPos + Vector3.new(0, EXIT_PORTAL_HEIGHT, 0)
+		exitNorm = Vector3.new(0, 0, -1)
+	end
+	return createPortalPart(exitPos, exitNorm)
+end
+
+local function getAimPosition()
+	local x, y = m.X, m.Y
+	if x == 0 and y == 0 then
+		local vp = Camera.ViewportSize
+		x, y = vp.X / 2, vp.Y / 2
+	end
+	return x, y
+end
+
+local function shoot()
+	local camera = workspace.CurrentCamera
+	if not camera or not muzzle or not handle then return end
+	local ax, ay = getAimPosition()
+	local ray = camera:ScreenPointToRay(ax, ay)
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	params.FilterDescendantsInstances = ignoreList()
+	local result = workspace:Raycast(ray.Origin, ray.Direction * RANGE, params)
+	local snd = handle:FindFirstChild("射击音效")
+	if snd then snd:Play() end
+	if not result then
+		createBeam(muzzle.Position, ray.Origin + ray.Direction * RANGE, PORTAL_EMIT_COLOR)
+		return
+	end
+	createBeam(muzzle.Position, result.Position, PORTAL_EMIT_COLOR)
+	arrivedAt = nil
+
+	local function resetBoth()
+		if portal1 then destroyPortalPart(portal1) end
+		if portal2 then destroyPortalPart(portal2) end
+		portal1, portal2 = nil, nil
+	end
+
+	if currentDestination == "休闲" then
+		resetBoth()
+		portal1 = createPortalPart(result.Position, result.Normal)
+		ensureChillExists()
+		local gp = findGround(CHILL_CENTER, 400)
+		portal2 = createExitPortalInDimension(gp, result.Normal)
+		notify("通往休闲地图的传送门已开启！", "走进去！")
+	elseif currentDestination == "车库" then
+		resetBoth()
+		portal1 = createPortalPart(result.Position, result.Normal)
+		ensureGarageExists()
+		local gp = findGround(GARAGE_CENTER, 0)
+		portal2 = createExitPortalInDimension(gp, result.Normal)
+		notify("通往车库的传送门已开启！", "你会出现在车库内部！")
+	elseif currentDestination == "复古" then
+		resetBoth()
+		portal1 = createPortalPart(result.Position, result.Normal)
+		ensureRetroExists()
+		local gp = findGround(RETRO_CENTER, 400)
+		portal2 = createExitPortalInDimension(gp, result.Normal)
+		notify("通往复古地图的传送门已开启！", "走进去！")
+	elseif currentDestination == "返回" then
+		if not returnPosition then
+			notify("提示", "返回点已丢失！")
+			currentDestination = "普通"
+			return
+		end
+		resetBoth()
+		portal1 = createPortalPart(result.Position, result.Normal)
+		local exitPos = returnPosition + Vector3.new(0, 3, 0)
+		portal2 = createPortalPart(exitPos, Vector3.new(0, 0, -1), true)
+		notify("返回地球的传送门已开启！", "走进去即可返回！")
+	else
+		if nextPortal == 1 then
+			if portal1 then destroyPortalPart(portal1) end
+			portal1 = createPortalPart(result.Position, result.Normal)
+			nextPortal = 2
+		else
+			if portal2 then destroyPortalPart(portal2) end
+			portal2 = createPortalPart(result.Position, result.Normal)
+			nextPortal = 1
+		end
+	end
+end
+
+local function giveGun()
+	cleanupPortals()
+	removeGunFromPlayer(GUN_NAME)
+
+	gunConfig.posX  = GUN_STYLE.pos.x
+	gunConfig.posY  = GUN_STYLE.pos.y
+	gunConfig.posZ  = GUN_STYLE.pos.z
+	gunConfig.rotX  = GUN_STYLE.rot.x
+	gunConfig.rotY  = GUN_STYLE.rot.y
+	gunConfig.rotZ  = GUN_STYLE.rot.z
+	gunConfig.scale = GUN_STYLE.scale
+	refreshAllConfigRows()
+	updateCodeBox()
+
+
+	local okBuild, buildErr = pcall(function()
+		local newTool, newHandle = buildEvilMortyGun()
+		if not newTool or not newHandle then error("buildEvilMortyGun() 返回了 nil") end
+		tool, handle = newTool, newHandle
+	end)
+	if not okBuild then
+		warn("构建工具出错: " .. tostring(buildErr))
+		return
+	end
+	pcall(rebuildGunBody)
+	pcall(applyGunConfig)
+	pcall(function() tool.Activated:Connect(function() shoot() end) end)
+
+	local backpack = p:FindFirstChild("Backpack") or p:WaitForChild("Backpack", 10)
+	if not backpack then return end
+	tool.Parent = backpack
+
+	if p.Character then
+		local humanoid = p.Character:FindFirstChildOfClass("Humanoid")
+		if humanoid and not p.Character:FindFirstChild(GUN_NAME) then
+			pcall(function() humanoid:EquipTool(tool) end)
+		end
+	end
+end
+
+-- =====================================================
+--  键盘（PC）
+-- =====================================================
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+	if gameProcessed then return end
+	if input.KeyCode == Enum.KeyCode.R then toggleScanner() end
+	if input.KeyCode == Enum.KeyCode.Q then doDash() end
+	if input.KeyCode == Enum.KeyCode.B then toggleDashMode() end
+	if input.KeyCode == Enum.KeyCode.Z then setModeNormal()
+	elseif input.KeyCode == Enum.KeyCode.X then setModeChill()
+	elseif input.KeyCode == Enum.KeyCode.C then setModeGarage()
+	elseif input.KeyCode == Enum.KeyCode.E then setModeRetro()
+	elseif input.KeyCode == Enum.KeyCode.V then setModeReturn()
+	elseif input.KeyCode == Enum.KeyCode.G then
+		if menuFrame then menuFrame.Visible = not menuFrame.Visible end
+	elseif input.KeyCode == Enum.KeyCode.N then
+		if configFrame then configFrame.Visible = not configFrame.Visible end
+	end
+end)
+
+-- =====================================================
+--  📱 HUD 按钮 + 编辑模式
+-- =====================================================
+local savedPositions = {}
+local editMode = false   -- false = 锁定（仅点击），true = 可拖动
+
+local function createMobileControls()
+	local playerGui = p:WaitForChild("PlayerGui")
+	local old = playerGui:FindFirstChild("移动控制界面")
+	if old then old:Destroy() end
+
+	local gui = Instance.new("ScreenGui")
+	gui.Name = "移动控制界面"
+	gui.ResetOnSpawn = false
+	gui.IgnoreGuiInset = true
+	gui.DisplayOrder = 100
+	gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+	gui.Parent = playerGui
+
+	-- ========= HUD 按钮 =========
+	local function makeHUDButton(id, defaultPos, icon, caption, accentColor, onClick)
+		local size = 52
+
+		local container = Instance.new("Frame")
+		container.Name = id
+		container.Size = UDim2.new(0, size, 0, size + 14)
+		container.BackgroundTransparency = 1
+		container.Position = savedPositions[id] or defaultPos
+		container.Parent = gui
+
+
+		local btn = Instance.new("TextButton")
+		btn.Size = UDim2.new(1, 0, 0, size)
+		btn.BackgroundColor3 = Color3.fromRGB(10, 10, 10)
+		btn.BackgroundTransparency = 0.35
+		btn.BorderSizePixel = 0
+		btn.Text = ""
+		btn.AutoButtonColor = false
+		btn.Active = true
+		btn.Parent = container
+		addCorner(btn, size / 2)
+
+		local stroke = Instance.new("UIStroke")
+		stroke.Color = accentColor
+		stroke.Thickness = 2
+		stroke.Transparency = 0.25
+		stroke.Parent = btn
+
+		local iconLbl = Instance.new("TextLabel")
+		iconLbl.Size = UDim2.new(1, 0, 1, 0)
+		iconLbl.BackgroundTransparency = 1
+		iconLbl.Text = icon
+		iconLbl.TextColor3 = accentColor
+		iconLbl.TextSize = 26
+		iconLbl.Font = Enum.Font.GothamBlack
+		iconLbl.Parent = btn
+
+		local cap = Instance.new("TextLabel")
+		cap.Size = UDim2.new(1, 0, 0, 12)
+		cap.Position = UDim2.new(0, 0, 1, 1)
+		cap.BackgroundTransparency = 1
+		cap.Text = caption
+		cap.TextColor3 = Color3.fromRGB(230, 230, 230)
+		cap.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+		cap.TextStrokeTransparency = 0.4
+		cap.TextSize = 10
+		cap.Font = Enum.Font.GothamBold
+		cap.Parent = container
+
+		-- ===== 逻辑：拖动或点击 =====
+		local dragging = false
+		local dragStart, startPos
+		local moved = false
+		local DRAG_THRESHOLD = 6
+
+		btn.InputBegan:Connect(function(input)
+			if input.UserInputType == Enum.UserInputType.MouseButton1
+				or input.UserInputType == Enum.UserInputType.Touch then
+				if editMode then
+					dragging = true
+					moved = false
+					dragStart = input.Position
+                                        					startPos = container.Position
+				end
+			end
+		end)
+
+		UserInputService.InputChanged:Connect(function(input)
+			if not dragging then return end
+			if input.UserInputType == Enum.UserInputType.MouseMovement
+				or input.UserInputType == Enum.UserInputType.Touch then
+				local delta = input.Position - dragStart
+				if delta.Magnitude > DRAG_THRESHOLD then moved = true end
+				container.Position = UDim2.new(
+					startPos.X.Scale, startPos.X.Offset + delta.X,
+					startPos.Y.Scale, startPos.Y.Offset + delta.Y
+				)
+			end
+		end)
+
+		UserInputService.InputEnded:Connect(function(input)
+			if not dragging then return end
+			if input.UserInputType == Enum.UserInputType.MouseButton1
+				or input.UserInputType == Enum.UserInputType.Touch then
+				dragging = false
+				if moved then
+					savedPositions[id] = container.Position
+				end
+			end
+		end)
+
+		-- 普通点击（不在编辑模式时生效）
+		btn.MouseButton1Click:Connect(function()
+			if not editMode then
+				onClick()
+			end
+		end)
+
+		return container
+	end
+
+	-- 两个 HUD 按钮 — 左侧，偏下（避免挡住 HUD）
+	makeHUDButton(
+		"扫描按钮",
+		UDim2.new(0, 20, 0.70, 0),
+		"🔍", "扫描",
+		Color3.fromRGB(255, 200, 40),
+		function() toggleScanner() end
+	)
+
+	makeHUDButton(
+		"冲刺按钮",
+		UDim2.new(0, 20, 0.82, 0),
+		"💨", "冲刺",
+		Color3.fromRGB(0, 200, 255),
+		function() doDash() end
+	)
+
+	-- ========= 编辑模式按钮 🔒/🔓 =========
+	local lockBtn = Instance.new("TextButton")
+	lockBtn.Name = "锁定按钮"
+	lockBtn.Size = UDim2.new(0, 40, 0, 40)
+	lockBtn.Position = UDim2.new(1, -56, 0, 16)
+	lockBtn.BackgroundColor3 = Color3.fromRGB(10, 10, 10)
+	lockBtn.BackgroundTransparency = 0.2
+	lockBtn.BorderSizePixel = 0
+	lockBtn.Text = editMode and "🔓" or "🔒"
+	lockBtn.TextColor3 = editMode and Color3.fromRGB(120, 255, 120) or Color3.fromRGB(230, 230, 230)
+	lockBtn.TextSize = 20
+	lockBtn.Font = Enum.Font.GothamBlack
+	lockBtn.AutoButtonColor = true
+	lockBtn.Parent = gui
+	addCorner(lockBtn, 20)
+
+	local lockStroke = Instance.new("UIStroke")
+	lockStroke.Color = editMode and Color3.fromRGB(120, 255, 120) or Color3.fromRGB(150, 150, 150)
+	lockStroke.Thickness = 2
+	lockStroke.Transparency = 0.3
+	lockStroke.Parent = lockBtn
+
+	lockBtn.MouseButton1Click:Connect(function()
+		editMode = not editMode
+		lockBtn.Text = editMode and "🔓" or "🔒"
+		lockBtn.TextColor3 = editMode and Color3.fromRGB(120, 255, 120) or Color3.fromRGB(230, 230, 230)
+		lockStroke.Color = editMode and Color3.fromRGB(120, 255, 120) or Color3.fromRGB(150, 150, 150)
+
+		pcall(function() StarterGui:SetCore("SendNotification", {
+			Title = editMode and "编辑模式已开启" or "编辑模式已关闭",
+			Text = editMode and "可自由拖动按钮位置" or "按钮位置已锁定",
+			Duration = 2
+		}) end)
+	end)
+end
+
+-- =====================================================
+--  🚀 启动
+-- =====================================================
+local ok, err = pcall(function()
+	giveGun()
+	createMenu()
+	createConfigPanel()
+	createMobileControls()
+end)
+
+if not ok then
+	warn("❌ 启动出错: " .. tostring(err))
+end
+
+p.CharacterAdded:Connect(function(char)
+	task.wait(0.5)
+	pcall(function()
+		giveGun()
+		createMenu()
+		createConfigPanel()
+		createMobileControls()
+	end)
+end)
